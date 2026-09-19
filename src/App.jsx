@@ -1,46 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 const promptEntries = [
   'Hey Celia!',
-  'Welcome back. Let us begin with today\'s briefing.',
-  'We are tracking the performance of your communication flow.',
-  'Your tone should be warm, concise, and confident.',
-  'Keep your delivery at a natural pace and maintain eye contact.',
-  'Take a breath before each answer to sound more thoughtful.',
-  'We are now reviewing the next set of tasks for the team.',
-  'Each message should support the overall objective clearly.',
-  'Remember to speak naturally and make the session feel personal.',
-  'You are helping create a better experience for the user.',
-  'This process will guide the next steps in the workflow.',
-  'Keep the content professional, direct, and engaging.',
-  'The presentation should feel premium and trustworthy.',
-  'Let your voice convey clarity and calm energy.',
-  'We are finalizing the recording for review and export.',
-  'Great work. This session is almost complete.',
-  'Thank you for your focus and attention today.',
-  'End with a clear, confident close.',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!',
+  'Hey Celia!'
 ];
 
 const promptTimings = [
-  3, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 ];
 
 const taskOptions = [
-  'TC-1001',
-  'TC-1002',
-  'TC-1003',
-  'TC-1004',
-  'TC-1005',
-  'TC-1006',
-  'TC-1010',
-  'TC-1015',
-  'TC-1020',
-  'TC-2030',
-  'TC-3050',
-  'TC-4401',
-  'TC-5502',
+  'TASK-0001',
+  'TASK-0002',
+  'TASK-0003',
+  'TASK-0004',
+  'TASK-0005',
+  'TASK-0006',
+  'TASK-0010',
+  'TASK-0015',
+  'TASK-0020',
+  'TASK-0030',
+  'TASK-0050',
+  'TASK-0401',
+  'TASK-0502',
 ];
 
 const initialPromptSequence = promptEntries.map((line, index) => ({
@@ -61,9 +59,9 @@ const formatDateTime = (date = new Date()) =>
     hour12: false,
   })}`;
 
-const toMp3Filename = (taskId) => {
+const toWebmFilename = (taskId) => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `${taskId || 'task'}_${timestamp}.mp3`;
+  return `${taskId || 'task'}_${timestamp}.webm`;
 };
 
 const toTranscriptFilename = (taskId) => {
@@ -76,8 +74,10 @@ const downloadBlob = (blob, filename) => {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 };
 
 const getAudioContext = () => {
@@ -105,9 +105,12 @@ const buildWaveformLevels = (data) =>
 
 function App() {
   const [page, setPage] = useState('login');
+  const [pageHistory, setPageHistory] = useState([]);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const [forwardPage, setForwardPage] = useState(null);
   const [email, setEmail] = useState('john.michael@thot.ai');
   const [password, setPassword] = useState('••••••••');
-  const [taskId, setTaskId] = useState('TC-1001');
+  const [taskId, setTaskId] = useState('TASK-1001');
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [activePrompt, setActivePrompt] = useState(initialPromptSequence[0]);
   const [isRecording, setIsRecording] = useState(false);
@@ -118,11 +121,13 @@ function App() {
   const [downloadPromptIndex, setDownloadPromptIndex] = useState('all');
   const [isExportMode, setIsExportMode] = useState(false);
   const [savedRecordings, setSavedRecordings] = useState([]);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [status, setStatus] = useState('Ready');
   const [transcript, setTranscript] = useState([]);
   const [isAudioSupported, setIsAudioSupported] = useState(true);
   const [countdown, setCountdown] = useState(0);
   const [waveformLevels, setWaveformLevels] = useState(Array.from({ length: 8 }, () => 28));
+  const [isStopped, setIsStopped] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -137,12 +142,19 @@ function App() {
   const pauseStartedAtRef = useRef(0);
   const transcriptRef = useRef([]);
   const exportInProgressRef = useRef(false);
+  const savedRecordingsRef = useRef([]);
+  const previewAudioRef = useRef(null);
   const countdownRef = useRef(null);
+  const countdownAudioRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const isPausedRef = useRef(false);
   const currentPromptIndexRef = useRef(0);
+  const frozenProgressRef = useRef(0);
+  const frozenTimeRef = useRef(0);
+  const frozenCompletedRef = useRef([]);
+  const frozenActiveIndexRef = useRef(0);
 
   const localDateLabel = useMemo(() => new Date().toLocaleString(), []);
 
@@ -159,6 +171,18 @@ function App() {
       setIsAudioSupported(false);
       setStatus('Microphone recording is not supported by this browser.');
     }
+  }, []);
+
+  useEffect(() => {
+    savedRecordingsRef.current = savedRecordings;
+  }, [savedRecordings]);
+
+  useEffect(() => {
+    return () => {
+      for (const rec of savedRecordingsRef.current) {
+        if (rec.audioUrl) URL.revokeObjectURL(rec.audioUrl);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -246,6 +270,10 @@ function App() {
     pausedMsRef.current = 0;
     pauseStartedAtRef.current = 0;
     startRef.current = 0;
+    frozenProgressRef.current = 0;
+    frozenTimeRef.current = 0;
+    frozenCompletedRef.current = [];
+    frozenActiveIndexRef.current = 0;
     clearInterval(timerRef.current);
     clearInterval(countdownRef.current);
     setCountdown(0);
@@ -287,12 +315,14 @@ function App() {
     clearWaveform();
 
     const finalizedTranscript = transcriptPayload.length ? transcriptPayload : transcriptRef.current;
+    const audioUrl = URL.createObjectURL(audioBlob);
     const sessionSnapshot = {
       id: `${taskId}-${Date.now()}`,
       taskId,
       transcript: finalizedTranscript,
       duration: recordingTime,
       blob: audioBlob,
+      audioUrl,
       createdAt: new Date().toISOString(),
     };
     setSavedRecordings((previous) => [sessionSnapshot, ...previous].slice(0, 10));
@@ -330,7 +360,8 @@ function App() {
     }
 
     resetRecordingState();
-    setPage('recording');
+    setIsStopped(false);
+    navigateTo('recording');
     setCurrentPromptIndex(0);
     setActivePrompt(initialPromptSequence[0]);
     setStatus('Microphone ready. Press Record to begin.');
@@ -339,8 +370,15 @@ function App() {
   const startCountdownAndRecording = () => {
     if (isRecording || countdownRef.current) return;
 
+    setIsStopped(false);
     setStatus('Recording starts in 3...');
     setCountdown(3);
+
+    // Play countdown audio — the file is 3 s (3-2-1-go), starts immediately
+    if (countdownAudioRef.current) {
+      countdownAudioRef.current.currentTime = 0;
+      countdownAudioRef.current.play().catch(() => undefined);
+    }
 
     countdownRef.current = setInterval(() => {
       setCountdown((previous) => {
@@ -356,6 +394,12 @@ function App() {
   };
 
   const startActualRecording = async () => {
+    // Revoke previous preview URL and stop any active playback
+    const prevUrl = savedRecordingsRef.current[0]?.audioUrl;
+    if (prevUrl) URL.revokeObjectURL(prevUrl);
+    if (previewAudioRef.current) previewAudioRef.current.pause();
+    setIsPlayingPreview(false);
+
     if (!streamRef.current) {
       const granted = await requestRecordingPermission();
       if (!granted) return;
@@ -443,7 +487,7 @@ function App() {
             setActivePrompt(nextPrompt);
             promptStartRef.current = now;
             promptElapsedMsRef.current = 0;
-            setStatus(`Prompt ${nextIndex + 1} of ${initialPromptSequence.length}`);
+            setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
           } else {
             clearInterval(timerRef.current);
             stopRecordingAndExport();
@@ -453,7 +497,7 @@ function App() {
 
       tickRef.current = tick;
       timerRef.current = setInterval(tick, 100);
-      setStatus(`Prompt 1 of ${initialPromptSequence.length}`);
+      setStatus(`Task 1 of ${initialPromptSequence.length}`);
     } catch (error) {
       console.error('Unable to start recording', error);
       setStatus('Recording could not start.');
@@ -462,26 +506,28 @@ function App() {
   };
 
   const stopRecordingAndExport = () => {
+    // Snapshot exact values into refs BEFORE any async work or state batching
+    const now = Date.now();
+    if (startRef.current) {
+      frozenTimeRef.current = now - startRef.current - pausedMsRef.current;
+    }
+    const currentIndex = currentPromptIndexRef.current;
+    const currentItem = initialPromptSequence[currentIndex];
+    if (currentItem && promptStartRef.current) {
+      const elapsedInPrompt = now - promptStartRef.current;
+      const durationMs = currentItem.duration * 1000;
+      frozenProgressRef.current = Math.min((elapsedInPrompt / durationMs) * 100, 100);
+    }
+    frozenCompletedRef.current = [...completedPrompts];
+    frozenActiveIndexRef.current = currentPromptIndexRef.current;
+
     stopRequestedRef.current = true;
     setIsRecording(false);
     setIsPaused(false);
     isPausedRef.current = false;
+    setIsStopped(true);
 
     const recorder = mediaRecorderRef.current;
-    const currentIndex = currentPromptIndexRef.current;
-    const currentItem = initialPromptSequence[currentIndex];
-    const now = Date.now();
-
-    if (startRef.current) {
-      const elapsed = now - startRef.current - pausedMsRef.current;
-      setRecordingTime(elapsed);
-    }
-
-    if (currentItem && promptStartRef.current) {
-      const elapsedInPrompt = now - promptStartRef.current;
-      const durationMs = currentItem.duration * 1000;
-      setProgress(Math.min((elapsedInPrompt / durationMs) * 100, 100));
-    }
 
     clearInterval(timerRef.current);
     timerRef.current = null;
@@ -558,6 +604,22 @@ function App() {
     stopRecordingAndExport();
   };
 
+  const handleReRecord = () => {
+    resetRecordingState();
+    setIsStopped(false);
+    setStatus('Microphone ready. Press Record to begin.');
+  };
+
+  const handleStartOver = () => {
+    resetRecordingState();
+    setIsStopped(false);
+    setSavedRecordings([]);
+    setPage('login');
+    setPageHistory([]);
+    setCanGoForward(false);
+    setForwardPage(null);
+  };
+
   const downloadTranscript = (taskIdValue, entries) => {
     const lines = [
       '========================================',
@@ -569,9 +631,9 @@ function App() {
     ];
 
     const contentEntries = entries.map((item, index) => {
-      const promptText = item.text || `Prompt ${index + 1}`;
+      const promptText = item.text || `Task ${index + 1}`;
       const range = item.start && item.end ? `[${item.start} -> ${item.end}]` : '';
-      return `${range} Prompt ${index + 1}: ${promptText}`;
+      return `${range} Task ${index + 1}: ${promptText}`;
     });
 
     const text = [...lines, ...contentEntries, '', '------------'].join('\n');
@@ -583,10 +645,7 @@ function App() {
     const latestRecording = savedRecordings[0];
 
     if (latestRecording?.blob) {
-      const mp3Blob = await convertToMp3(latestRecording.blob);
-      if (mp3Blob) {
-        downloadBlob(mp3Blob, toMp3Filename(latestRecording.taskId || taskId));
-      }
+      downloadBlob(latestRecording.blob, toWebmFilename(latestRecording.taskId || taskId));
     }
 
     const entries = latestRecording?.transcript?.length
@@ -604,82 +663,113 @@ function App() {
       : entries.filter((entry) => entry.promptIndex === selectedPromptValue + 1);
 
     if (!selectedEntries.length) {
-      setStatus('No prompt text available for download.');
+      setStatus('No task text available for download.');
       return;
     }
 
     const promptText = selectedEntries
-      .map((entry) => `${entry.text || `Prompt ${entry.promptIndex}`}\n${entry.start && entry.end ? `[${entry.start} -> ${entry.end}]` : ''}`)
+      .map((entry) => `${entry.text || `Task ${entry.promptIndex}`}\n${entry.start && entry.end ? `[${entry.start} -> ${entry.end}]` : ''}`)
       .join('\n\n');
 
     const filename = downloadPromptIndex === 'all'
       ? toTranscriptFilename(latestRecording?.taskId || taskId)
-      : `prompt_${selectedPromptValue + 1}_${latestRecording?.taskId || taskId}.txt`;
+      : `task_${selectedPromptValue + 1}_${latestRecording?.taskId || taskId}.txt`;
 
     const blob = new Blob([
       `TASK ID: ${latestRecording?.taskId || taskId}\n`,
-      `Prompt selection: ${downloadPromptIndex === 'all' ? 'All prompts' : `Prompt ${selectedPromptValue + 1}`}\n\n`,
+      `Task selection: ${downloadPromptIndex === 'all' ? 'All tasks' : `Task ${selectedPromptValue + 1}`}\n\n`,
       promptText,
     ], { type: 'text/plain;charset=utf-8' });
 
     downloadBlob(blob, filename);
-    setStatus(downloadPromptIndex === 'all' ? 'Recording and transcript exported' : `Prompt ${selectedPromptValue + 1} exported`);
+    setStatus(downloadPromptIndex === 'all' ? 'Recording and transcript exported' : `Task ${selectedPromptValue + 1} exported`);
     setIsExportMode(false);
   };
 
-  const ffmpegRef = useRef(null);
+  const handleTogglePreview = () => {
+    const url = savedRecordingsRef.current[0]?.audioUrl;
+    if (!url || !previewAudioRef.current) return;
 
-  const loadFFmpeg = async () => {
-    if (ffmpegRef.current) {
-      return ffmpegRef.current;
+    if (isPlayingPreview) {
+      previewAudioRef.current.pause();
+      setIsPlayingPreview(false);
+    } else {
+      previewAudioRef.current.play();
+      setIsPlayingPreview(true);
     }
-
-    const ffmpeg = new FFmpeg();
-    const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
-
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-
-    ffmpegRef.current = ffmpeg;
-    return ffmpeg;
   };
 
-  const convertToMp3 = async (audioBlob) => {
-    try {
-      const ffmpeg = await loadFFmpeg();
-      const inputName = 'input.webm';
-      const outputName = 'output.mp3';
+  const navigateTo = (nextPage) => {
+    setPageHistory((prev) => [...prev, page]);
+    setPage(nextPage);
+    setCanGoForward(false);
+    setForwardPage(null);
+  };
 
-      await ffmpeg.writeFile(inputName, await fetchFile(audioBlob));
-      await ffmpeg.exec(['-i', inputName, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputName]);
+  const handleBack = () => {
+    if (pageHistory.length === 0) return;
+    const prev = pageHistory[pageHistory.length - 1];
+    setForwardPage(page);
+    setCanGoForward(true);
+    setPage(prev);
+    setPageHistory((h) => h.slice(0, -1));
+  };
 
-      const data = await ffmpeg.readFile(outputName);
-      const fileData = data instanceof Uint8Array ? data : new Uint8Array(data);
-      return new Blob([fileData], { type: 'audio/mpeg' });
-    } catch (error) {
-      console.error('Error converting audio to MP3', error);
-      return null;
-    }
+  const handleForward = () => {
+    if (!canGoForward || !forwardPage) return;
+    setPageHistory((prev) => [...prev, page]);
+    setPage(forwardPage);
+    setCanGoForward(false);
+    setForwardPage(null);
   };
 
   const handleLogin = () => {
-    setPage('home');
+    navigateTo('home');
   };
 
   const handleReset = () => {
     setEmail('');
     setPassword('');
     setPage('login');
+    setPageHistory([]);
+    setCanGoForward(false);
+    setForwardPage(null);
   };
 
   const handleGuestLogin = () => {
-    setPage('home');
+    navigateTo('home');
   };
 
   return (
     <div className="app-shell">
+      {/* Hidden countdown audio */}
+      <audio ref={countdownAudioRef} src="/countdown.wav" preload="auto" style={{ display: 'none' }} />
+
+      {/* Global back/forward nav — visible on all pages except login */}
+      {page !== 'login' && (
+        <div className="nav-controls">
+          <button
+            className="nav-btn"
+            onClick={handleBack}
+            disabled={pageHistory.length === 0}
+            aria-label="Go back"
+            title="Back"
+          >
+            ← Back
+          </button>
+          {canGoForward && (
+            <button
+              className="nav-btn"
+              onClick={handleForward}
+              aria-label="Go forward"
+              title="Forward"
+            >
+              Forward →
+            </button>
+          )}
+        </div>
+      )}
+
       {page === 'login' && (
         <div className="auth-panel panel glass">
           <div className="auth-brand">THOT AI</div>
@@ -716,14 +806,14 @@ function App() {
           </header>
 
           <div className="task-panel panel glass">
-            <label className="field-label">Task ID</label>
+            <label className="field-label">Project</label>
             <div className="task-input-row">
               <select value={taskId} onChange={(event) => setTaskId(event.target.value)}>
                 {taskOptions.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
-              <button className="primary" onClick={() => setPage('instructions')}>Load</button>
+              <button className="primary" onClick={() => navigateTo('instructions')}>Load</button>
             </div>
           </div>
         </div>
@@ -746,18 +836,26 @@ function App() {
         <div className="recording-page panel glass">
           <div className="recording-header">
             <div>
-              <div className="recording-tag">Live Teleprompter</div>
+              <div className="recording-tag">Recording Collection Software</div>
               <h2>Hey Celia</h2>
             </div>
             <div className="status-pill">{status}</div>
           </div>
 
           <div className="teleprompter-display">
-            <div className="prompt-index">Prompt {currentPromptIndex + 1}</div>
-            <div className="prompt-text">{activePrompt.text}</div>
-            <div className="prompt-timer">
-              {countdown > 0 ? `Starts in ${countdown}` : formatTime(recordingTime)}
-            </div>
+            <div className="prompt-index">Task {currentPromptIndex + 1}</div>
+            {(isRecording || isStopped || countdown > 0) ? (
+              <>
+                <div className="prompt-text">{activePrompt.text}</div>
+                <div className="prompt-timer">
+                  {countdown > 0
+                    ? `Starts in ${countdown}`
+                    : formatTime(isStopped ? frozenTimeRef.current : recordingTime)}
+                </div>
+              </>
+            ) : (
+              <div className="prompt-text prompt-text--idle">Select a task below and press record to begin.</div>
+            )}
           </div>
 
           <div className="waveform" aria-label="Audio waveform">
@@ -771,13 +869,13 @@ function App() {
           </div>
 
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
+            <div className="progress-fill" style={{ width: `${isStopped ? frozenProgressRef.current : progress}%` }} />
           </div>
 
-          <div className={`prompt-selector ${isExportMode ? 'export-mode' : ''}`} aria-label="Prompt sequence selector">
+          <div className={`prompt-selector ${isExportMode ? 'export-mode' : ''}`} aria-label="Task selector">
             {initialPromptSequence.map((prompt, index) => {
-              const isActive = index === currentPromptIndex;
-              const isCompleted = completedPrompts.includes(index);
+              const isActive = index === (isStopped ? frozenActiveIndexRef.current : currentPromptIndex);
+              const isCompleted = (isStopped ? frozenCompletedRef.current : completedPrompts).includes(index);
               const isExportSelected = isExportMode && downloadPromptIndex !== 'all' && Number(downloadPromptIndex) === index;
               const isAllSelected = isExportMode && downloadPromptIndex === 'all' && index === 0;
               return (
@@ -788,7 +886,7 @@ function App() {
                   onClick={() => {
                     if (isExportMode) {
                       setDownloadPromptIndex(index === 0 && downloadPromptIndex === 'all' ? 'all' : String(index));
-                      setStatus(index === 0 && downloadPromptIndex === 'all' ? 'All prompts selected for export' : `Prompt ${index + 1} selected for export`);
+                      setStatus(index === 0 && downloadPromptIndex === 'all' ? 'All tasks selected for export' : `Task ${index + 1} selected for export`);
                       return;
                     }
 
@@ -798,20 +896,44 @@ function App() {
                     promptStartRef.current = Date.now();
                     promptElapsedMsRef.current = 0;
                     setProgress(0);
-                    setStatus(`Prompt ${index + 1} of ${initialPromptSequence.length}`);
+                    setStatus(`Task ${index + 1} of ${initialPromptSequence.length}`);
                   }}
                 >
-                  <span>{index + 1}</span>
+                  <span>Task {index + 1}</span>
                 </button>
               );
             })}
           </div>
 
           <div className="action-panel">
+            {savedRecordings.length > 0 && (
+              <audio
+                ref={previewAudioRef}
+                src={savedRecordings[0]?.audioUrl ?? ''}
+                onEnded={() => setIsPlayingPreview(false)}
+                style={{ display: 'none' }}
+              />
+            )}
             <div className="controls">
-              {!isRecording && !countdown ? (
+              {!isRecording && !countdown && !isStopped ? (
                 <button className="primary" onClick={startCountdownAndRecording}>Record</button>
               ) : null}
+              {isStopped && (
+                <>
+                  <button className="secondary" onClick={handleReRecord}>Re-record Task</button>
+                  <button className="danger" onClick={handleStartOver}>Start Over</button>
+                </>
+              )}
+              {!isRecording && !countdown && savedRecordings.length > 0 && (
+                <button
+                  className={`preview-play-btn${isPlayingPreview ? ' playing' : ''}`}
+                  onClick={handleTogglePreview}
+                  aria-label={isPlayingPreview ? 'Pause preview' : 'Play preview'}
+                  title={isPlayingPreview ? 'Pause preview' : 'Play recording'}
+                >
+                  {isPlayingPreview ? '⏸' : '▶'}
+                </button>
+              )}
               {isRecording && (
                 <>
                   <button className="secondary" onClick={handlePauseResume}>
@@ -838,7 +960,7 @@ function App() {
               {savedRecordings.map((recording) => (
                 <div key={recording.id} className="saved-recording-item">
                   <span>{recording.taskId}</span>
-                  <small>{recording.transcript.length} prompts • {formatTime(recording.duration)}</small>
+                  <small>{recording.transcript.length} tasks • {formatTime(recording.duration)}</small>
                 </div>
               ))}
             </div>
