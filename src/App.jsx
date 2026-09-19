@@ -41,6 +41,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { mergeSavedRecordings } from './recordings';
+import { getRemainingTransitionMs } from './timing';
 
 const promptEntries = [
   'Hi Celia!',
@@ -174,6 +175,7 @@ function App() {
   const [transcript, setTranscript] = useState([]);
   const [isAudioSupported, setIsAudioSupported] = useState(true);
   const [countdown, setCountdown] = useState(0);
+  const [transitionCountdownMs, setTransitionCountdownMs] = useState(0);
   const [waveformLevels, setWaveformLevels] = useState(Array.from({ length: 8 }, () => 28));
   const [isStopped, setIsStopped] = useState(false);
 
@@ -203,6 +205,10 @@ function App() {
   const isPausedRef = useRef(false);
   const currentPromptIndexRef = useRef(0);
   const transitionGapTimerRef = useRef(null);
+  const transitionCountdownRef = useRef(null);
+  const transitionStartedAtRef = useRef(0);
+  const transitionPauseStartedAtRef = useRef(0);
+  const transitionPausedAtRef = useRef(0);
   const frozenProgressRef = useRef(0);
   const frozenTimeRef = useRef(0);
   const frozenCompletedRef = useRef([]);
@@ -412,7 +418,15 @@ function App() {
       clearTimeout(transitionGapTimerRef.current);
       transitionGapTimerRef.current = null;
     }
+    if (transitionCountdownRef.current) {
+      clearInterval(transitionCountdownRef.current);
+      transitionCountdownRef.current = null;
+    }
+    transitionStartedAtRef.current = 0;
+    transitionPauseStartedAtRef.current = 0;
+    transitionPausedAtRef.current = 0;
     setCountdown(0);
+    setTransitionCountdownMs(0);
   };
 
   // Called when the final recorder stops (after Stop button or last prompt).
@@ -638,12 +652,29 @@ function App() {
             const gapMs = 2000;
             setStatus(`Task ${currentIndex + 1} complete. Next task starts in ${gapMs / 1000}s...`);
 
-            recorderReadyRef.current = false;
-            const currentRecorder = mediaRecorderRef.current;
+            setCurrentPromptIndex(nextIndex);
+            currentPromptIndexRef.current = nextIndex;
+            setActivePrompt(nextPrompt);
+            setTransitionCountdownMs(gapMs);
+            transitionStartedAtRef.current = Date.now();
+            transitionPauseStartedAtRef.current = Date.now();
+            transitionPausedAtRef.current = 0;
+
+            if (transitionCountdownRef.current) {
+              clearInterval(transitionCountdownRef.current);
+            }
             const resumeNextPrompt = () => {
+              if (transitionPauseStartedAtRef.current > 0) {
+                pausedMsRef.current += Date.now() - transitionPauseStartedAtRef.current;
+                transitionPauseStartedAtRef.current = 0;
+              }
+
               setCurrentPromptIndex(nextIndex);
               currentPromptIndexRef.current = nextIndex;
               setActivePrompt(nextPrompt);
+              setTransitionCountdownMs(0);
+              transitionStartedAtRef.current = 0;
+              transitionPausedAtRef.current = 0;
               promptStartRef.current = Date.now();
               promptElapsedMsRef.current = 0;
               setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
@@ -652,13 +683,33 @@ function App() {
               recorderReadyRef.current = true;
             };
 
-            if (transitionGapTimerRef.current) {
-              clearTimeout(transitionGapTimerRef.current);
-            }
-            transitionGapTimerRef.current = setTimeout(() => {
-              transitionGapTimerRef.current = null;
-              resumeNextPrompt();
-            }, gapMs);
+            transitionCountdownRef.current = setInterval(() => {
+              if (isPausedRef.current) {
+                if (transitionPausedAtRef.current === 0) {
+                  transitionPausedAtRef.current = Date.now();
+                }
+                return;
+              }
+
+              if (transitionPausedAtRef.current > 0) {
+                const pausedForMs = Date.now() - transitionPausedAtRef.current;
+                transitionStartedAtRef.current += pausedForMs;
+                transitionPausedAtRef.current = 0;
+              }
+
+              const elapsedTransitionMs = Date.now() - transitionStartedAtRef.current;
+              const remainingMs = getRemainingTransitionMs(elapsedTransitionMs, gapMs);
+              setTransitionCountdownMs(remainingMs);
+
+              if (remainingMs <= 0) {
+                clearInterval(transitionCountdownRef.current);
+                transitionCountdownRef.current = null;
+                resumeNextPrompt();
+              }
+            }, 100);
+
+            recorderReadyRef.current = false;
+            const currentRecorder = mediaRecorderRef.current;
 
             if (currentRecorder && currentRecorder.state !== 'inactive') {
               const originalOnStop = currentRecorder.onstop;
@@ -765,6 +816,16 @@ function App() {
         timerRef.current = setInterval(tickRef.current, 100);
       }
 
+      if (transitionStartedAtRef.current > 0 && transitionPausedAtRef.current > 0) {
+        const transitionPauseDuration = Date.now() - transitionPausedAtRef.current;
+        transitionStartedAtRef.current += transitionPauseDuration;
+        transitionPausedAtRef.current = 0;
+      }
+      if (transitionPauseStartedAtRef.current > 0) {
+        pausedMsRef.current += Date.now() - transitionPauseStartedAtRef.current;
+        transitionPauseStartedAtRef.current = 0;
+      }
+
       restartLiveWaveform();
 
       const pauseDuration = Date.now() - pauseStartedAtRef.current;
@@ -789,6 +850,14 @@ function App() {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
+    }
+
+    if (transitionStartedAtRef.current > 0 && transitionPausedAtRef.current === 0) {
+      transitionPausedAtRef.current = Date.now();
+    }
+    if (transitionPauseStartedAtRef.current > 0) {
+      pausedMsRef.current += Date.now() - transitionPauseStartedAtRef.current;
+      transitionPauseStartedAtRef.current = 0;
     }
 
     promptElapsedMsRef.current = Date.now() - promptStartRef.current;
@@ -1294,20 +1363,53 @@ function App() {
           </div>
 
           <div className="teleprompter-display">
-            <div className="prompt-index">Task {currentPromptIndex + 1}</div>
-            {(isRecording || isStopped || countdown > 0) ? (
-              <>
-                <div className="prompt-text">{activePrompt.text}</div>
-                <div className="prompt-timer">
-                  {countdown > 0
-                    ? `Starts in ${countdown}`
-                    : formatTime(isStopped ? frozenTimeRef.current : recordingTime)}
-                </div>
-              </>
-            ) : (
-              <div className="prompt-text prompt-text--idle">Select a task below and press record to begin.</div>
-            )}
-          </div>
+  {transitionCountdownMs > 0 ? (
+    <div className="transition-buffer" aria-live="polite">
+      <div className="transition-ring">
+        <svg viewBox="0 0 100 100" className="spinner-svg">
+          <defs>
+            <linearGradient id="spinner-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#C4B5FD" />
+              <stop offset="50%" stopColor="#0EA5E9" />
+              <stop offset="100%" stopColor="#14B8A6" />
+            </linearGradient>
+          </defs>
+          
+          {/* Background Track */}
+          <circle cx="50" cy="50" r="42" className="spinner-track" />
+          
+          {/* Dynamic Progress Ring (Circumference ~ 264) */}
+          <circle 
+            cx="50" 
+            cy="50" 
+            r="42" 
+            className="spinner-head"
+            style={{
+              strokeDashoffset: 264 * (1 - transitionCountdownMs / 2000)
+            }}
+          />
+        </svg>
+
+        <span>{Math.max(1, Math.ceil(transitionCountdownMs / 1000))}</span>
+      </div>
+
+      <div className="transition-copy">
+        <div className="prompt-index">Next task</div>
+        <div className="prompt-text prompt-text--buffer">Prepare</div>
+      </div>
+    </div>
+  ) : isRecording || isStopped || countdown > 0 ? (
+    <>
+      <div className="prompt-index">Task {currentPromptIndex + 1}</div>
+      <div className="prompt-text">{activePrompt.text}</div>
+      <div className="prompt-timer">
+        {countdown > 0 ? `Starts in ${countdown}` : formatTime(isStopped ? frozenTimeRef.current : recordingTime)}
+      </div>
+    </>
+  ) : (
+    <div className="prompt-text prompt-text--idle">Select a task below and press record to begin.</div>
+  )}
+</div>
 
           <div className="waveform" aria-label="Audio waveform">
             {waveformLevels.map((level, index) => (

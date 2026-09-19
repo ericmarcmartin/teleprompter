@@ -8,6 +8,10 @@ export const getResumedPromptStartTimestamp = (nowMs, elapsedBeforePauseMs) => {
   return nowMs - elapsedBeforePauseMs;
 };
 
+export const getRemainingTransitionMs = (elapsedMs, totalMs = TASK_TRANSITION_GAP_MS) => {
+  return Math.max(0, totalMs - elapsedMs);
+};
+
 export const getTaskTransitionStartTimestamp = (
   nowMs,
   promptStartMs,
