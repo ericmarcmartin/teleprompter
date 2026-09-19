@@ -1310,8 +1310,24 @@ function App() {
                     }}
                     aria-label={`${isPlaying ? 'Pause' : 'Play'} Task ${recording.promptIndex}`}
                   >
-                    <span>{recording.taskId} — Task {recording.promptIndex}</span>
-                    <small>{entry?.text ?? '—'}{duration ? ` • ${duration}` : ''}</small>
+                    <div className="saved-recording-main">
+                      <span>{recording.taskId} — Task {recording.promptIndex}</span>
+                      <small>{entry?.text ?? '—'}{duration ? ` • ${duration}` : ''}</small>
+                    </div>
+                    <div className="saved-recording-actions">
+                      <button
+                        type="button"
+                        className={`saved-recording-play-btn${isPlaying ? ' playing' : ''}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handlePlayRecording(recording);
+                        }}
+                        aria-label={`${isPlaying ? 'Pause' : 'Play'} Task ${recording.promptIndex}`}
+                        title={`${isPlaying ? 'Pause' : 'Play'} recording`}
+                      >
+                        {isPlaying ? '⏸' : '▶'}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
