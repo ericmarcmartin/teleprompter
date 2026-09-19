@@ -1034,7 +1034,7 @@ function App() {
                   <button className="danger" onClick={handleStartOver}>Start Over</button>
                 </>
               )}
-              {!isRecording && !countdown && savedRecordings.length > 0 && (
+              {/* {!isRecording && !countdown && savedRecordings.length > 0 && (
                 <button
                   className={`preview-play-btn${isPlayingPreview ? ' playing' : ''}`}
                   onClick={handleTogglePreview}
@@ -1043,7 +1043,7 @@ function App() {
                 >
                   {isPlayingPreview ? '⏸' : '▶'}
                 </button>
-              )}
+              )} */}
               {isRecording && (
                 <>
                   <button className="secondary" onClick={handlePauseResume}>
@@ -1052,9 +1052,9 @@ function App() {
                   <button className="danger" onClick={handleStop}>Stop</button>
                 </>
               )}
-              <button className="ghost compact export-toggle" onClick={() => setIsExportMode((previous) => !previous)}>
+              {/* <button className="ghost compact export-toggle" onClick={() => setIsExportMode((previous) => !previous)}>
                 {isExportMode ? 'Close export' : 'Export'}
-              </button>
+              </button> */}
             </div>
 
             {isExportMode && (
