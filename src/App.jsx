@@ -1,3 +1,43 @@
+// =============================================================================
+// FREEZE-ON-STOP INVARIANT — do not remove or work around this pattern
+//
+// When the Stop button is clicked, the UI must freeze exactly at the values
+// that existed at that instant: active task box, completed task boxes,
+// progress bar width, and prompt timer.
+//
+// How it works:
+//   1. stopRecordingAndExport() synchronously snapshots five refs:
+//        frozenActiveIndexRef  — which task box is highlighted
+//        frozenCompletedRef    — which task boxes are marked completed
+//        frozenProgressRef     — progress-bar width %
+//        frozenTimeRef         — prompt-timer elapsed ms
+//        frozenStatusRef       — status-pill text
+//      These refs are written BEFORE stopRequestedRef is set and BEFORE any
+//      React state setters are called, so they capture the true stop-moment
+//      values with no batching delay.
+//
+//   2. While isStopped === true, the JSX reads exclusively from these frozen
+//      refs instead of the live state values (currentPromptIndex,
+//      completedPrompts, progress, recordingTime, status).
+//
+//   3. resetRecordingState() clears all five frozen refs back to their zero
+//      values so a Re-record or Start Over starts clean.
+//
+// Why refs instead of state:
+//   React state setters are asynchronous — a setInterval tick that fires in
+//   the same JS event-loop turn as the stop call can overwrite state with a
+//   later timestamp before the frozen values are committed. Refs update
+//   synchronously and are never subject to batching.
+//
+// Rules:
+//   - Never read live state for these four values while isStopped === true.
+//   - Never skip writing a frozen ref in stopRecordingAndExport().
+//   - Never skip clearing a frozen ref in resetRecordingState().
+//   - Do not add new display values that animate/update after stop without
+//     adding a corresponding frozen ref for them.
+// =============================================================================
+
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const promptEntries = [
@@ -155,6 +195,7 @@ function App() {
   const frozenTimeRef = useRef(0);
   const frozenCompletedRef = useRef([]);
   const frozenActiveIndexRef = useRef(0);
+  const frozenStatusRef = useRef('');
 
   const localDateLabel = useMemo(() => new Date().toLocaleString(), []);
 
@@ -274,6 +315,7 @@ function App() {
     frozenTimeRef.current = 0;
     frozenCompletedRef.current = [];
     frozenActiveIndexRef.current = 0;
+    frozenStatusRef.current = '';
     clearInterval(timerRef.current);
     clearInterval(countdownRef.current);
     setCountdown(0);
@@ -520,6 +562,7 @@ function App() {
     }
     frozenCompletedRef.current = [...completedPrompts];
     frozenActiveIndexRef.current = currentPromptIndexRef.current;
+    frozenStatusRef.current = status;
 
     stopRequestedRef.current = true;
     setIsRecording(false);
@@ -839,7 +882,7 @@ function App() {
               <div className="recording-tag">Recording Collection Software</div>
               <h2>Hey Celia</h2>
             </div>
-            <div className="status-pill">{status}</div>
+            <div className="status-pill">{isStopped ? frozenStatusRef.current : status}</div>
           </div>
 
           <div className="teleprompter-display">
