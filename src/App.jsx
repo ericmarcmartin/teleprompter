@@ -40,6 +40,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { mergeSavedRecordings } from './recordings';
+
 const promptEntries = [
   'Hey Celia!',
   'Hey Celia!',
@@ -161,6 +163,7 @@ function App() {
   const [downloadPromptIndex, setDownloadPromptIndex] = useState('all');
   const [isExportMode, setIsExportMode] = useState(false);
   const [savedRecordings, setSavedRecordings] = useState([]);
+  const [playingRecordingId, setPlayingRecordingId] = useState(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [status, setStatus] = useState('Ready');
   const [transcript, setTranscript] = useState([]);
@@ -183,6 +186,8 @@ function App() {
   const transcriptRef = useRef([]);
   const exportInProgressRef = useRef(false);
   const savedRecordingsRef = useRef([]);
+  const playbackAudioRef = useRef(null);
+  const playingIdRef = useRef(null);
   const previewAudioRef = useRef(null);
   const countdownRef = useRef(null);
   const countdownAudioRef = useRef(null);
@@ -329,30 +334,13 @@ function App() {
   };
 
   // Called when the final recorder stops (after Stop button or last prompt).
-  // Seals the last per-prompt recording and commits everything to state.
+  // Only finalized prompt recordings are saved. If Stop is pressed mid-task,
+  // we keep the recorded prompts already completed and discard the current partial.
   const finalizeRecordingExport = async () => {
     if (exportInProgressRef.current) {
       return;
     }
     exportInProgressRef.current = true;
-
-    const finalChunks = [...recordedChunksRef.current];
-    const recorder = mediaRecorderRef.current;
-    const mimeType = recorder?.mimeType || 'audio/webm';
-
-    // Seal the last prompt's recording if it captured any data
-    if (finalChunks.length > 0) {
-      const lastEntry = transcriptRef.current[transcriptRef.current.length - 1];
-      const promptIndex = lastEntry
-        ? lastEntry.promptIndex
-        : currentPromptIndexRef.current + 1;
-      perPromptRecordingsRef.current.push({
-        promptIndex,
-        blob: new Blob(finalChunks, { type: mimeType }),
-        mimeType,
-        entry: lastEntry || null,
-      });
-    }
 
     setTranscript([...transcriptRef.current]);
     setIsRecording(false);
@@ -361,21 +349,22 @@ function App() {
     stopRequestedRef.current = false;
     clearWaveform();
 
-    // Build per-prompt savedRecordings entries
-    const newRecordings = perPromptRecordingsRef.current.map((rec) => {
-      const audioUrl = URL.createObjectURL(rec.blob);
-      return {
-        id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
-        taskId,
-        promptIndex: rec.promptIndex,
-        transcript: rec.entry ? [rec.entry] : [],
-        blob: rec.blob,
-        audioUrl,
-        createdAt: new Date().toISOString(),
-      };
-    });
+    const newRecordings = perPromptRecordingsRef.current
+      .filter((rec) => rec && rec.blob)
+      .map((rec) => {
+        const audioUrl = URL.createObjectURL(rec.blob);
+        return {
+          id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
+          taskId,
+          promptIndex: rec.promptIndex,
+          transcript: rec.entry ? [rec.entry] : [],
+          blob: rec.blob,
+          audioUrl,
+          createdAt: new Date().toISOString(),
+        };
+      });
 
-    setSavedRecordings((previous) => [...newRecordings, ...previous].slice(0, 100));
+    setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings).slice(0, 100));
     setStatus(`${newRecordings.length} task recording${newRecordings.length !== 1 ? 's' : ''} saved. Export when you are ready.`);
 
     const stream = streamRef.current;
@@ -404,9 +393,10 @@ function App() {
     };
 
     recorder.onstop = () => {
-      // Seal this prompt's audio blob and attach its transcript entry
       const finishedChunks = [...chunks];
-      if (finishedChunks.length === 0) return;
+      if (stopRequestedRef.current || finishedChunks.length === 0) {
+        return;
+      }
 
       const mimeType = recorder.mimeType || 'audio/webm';
       const entry = transcriptRef.current.find((e) => e.promptIndex === promptIndex) || null;
@@ -654,6 +644,20 @@ function App() {
     }
   };
 
+  const stopPlaybackAudio = () => {
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.onended = null;
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current.src = '';
+      playbackAudioRef.current = null;
+    }
+
+    if (playingIdRef.current) {
+      playingIdRef.current = null;
+      setPlayingRecordingId(null);
+    }
+  };
+
   const handlePauseResume = () => {
     if (!isRecording) return;
 
@@ -806,6 +810,23 @@ function App() {
       previewAudioRef.current.play();
       setIsPlayingPreview(true);
     }
+  };
+
+  const handlePlayRecording = (recording) => {
+    if (playingIdRef.current === recording.id) {
+      stopPlaybackAudio();
+      return;
+    }
+
+    stopPlaybackAudio();
+
+    const audio = new Audio(recording.audioUrl);
+    playbackAudioRef.current = audio;
+    playingIdRef.current = recording.id;
+    setPlayingRecordingId(recording.id);
+
+    audio.onended = () => stopPlaybackAudio();
+    audio.play().catch(() => stopPlaybackAudio());
   };
 
   const navigateTo = (nextPage) => {
@@ -1072,8 +1093,23 @@ function App() {
                 const duration = entry?.start && entry?.end
                   ? `${entry.start} → ${entry.end}`
                   : null;
+                const isPlaying = playingRecordingId === recording.id;
+
                 return (
-                  <div key={recording.id} className="saved-recording-item">
+                  <div
+                    key={recording.id}
+                    className={`saved-recording-item${isPlaying ? ' playing' : ''}`}
+                    onClick={() => handlePlayRecording(recording)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handlePlayRecording(recording);
+                      }
+                    }}
+                    aria-label={`${isPlaying ? 'Pause' : 'Play'} Task ${recording.promptIndex}`}
+                  >
                     <span>{recording.taskId} — Task {recording.promptIndex}</span>
                     <small>{entry?.text ?? '—'}{duration ? ` • ${duration}` : ''}</small>
                   </div>
