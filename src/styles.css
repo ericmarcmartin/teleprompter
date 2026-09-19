@@ -199,7 +199,6 @@ select {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.20em;
-  text-transform: uppercase;
   color: var(--purple-vivid);
   text-align: center;
   margin-bottom: 10px;

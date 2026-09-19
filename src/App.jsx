@@ -156,7 +156,7 @@ function App() {
   const [pageHistory, setPageHistory] = useState([]);
   const [canGoForward, setCanGoForward] = useState(false);
   const [forwardPage, setForwardPage] = useState(null);
-  const [email, setEmail] = useState('jarren.dave@thot.ai');
+  const [email, setEmail] = useState('jarren.dave');
   const [password, setPassword] = useState('••••••••');
   const [taskId, setTaskId] = useState('TASK-1001');
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -1291,7 +1291,7 @@ function App() {
 
       {page === 'login' && (
         <div className="auth-panel panel glass">
-          <div className="auth-brand">THOT AI</div>
+          <div className="auth-brand">ThothAI</div>
           <h1>Welcome back</h1>
           <div className="field-group">
             <label>Email</label>
