@@ -196,6 +196,11 @@ function App() {
   const frozenCompletedRef = useRef([]);
   const frozenActiveIndexRef = useRef(0);
   const frozenStatusRef = useRef('');
+  // Per-prompt recording storage: array of { promptIndex, blob, mimeType, entry }
+  const perPromptRecordingsRef = useRef([]);
+  // Blocks the tick from triggering another boundary crossing while a recorder
+  // hand-off (stop old → start new) is in flight.
+  const recorderReadyRef = useRef(true);
 
   const localDateLabel = useMemo(() => new Date().toLocaleString(), []);
 
@@ -316,11 +321,15 @@ function App() {
     frozenCompletedRef.current = [];
     frozenActiveIndexRef.current = 0;
     frozenStatusRef.current = '';
+    perPromptRecordingsRef.current = [];
+    recorderReadyRef.current = true;
     clearInterval(timerRef.current);
     clearInterval(countdownRef.current);
     setCountdown(0);
   };
 
+  // Called when the final recorder stops (after Stop button or last prompt).
+  // Seals the last per-prompt recording and commits everything to state.
   const finalizeRecordingExport = async () => {
     if (exportInProgressRef.current) {
       return;
@@ -328,24 +337,20 @@ function App() {
     exportInProgressRef.current = true;
 
     const finalChunks = [...recordedChunksRef.current];
-    if (!finalChunks.length) {
-      setStatus('No recording data was captured.');
-      exportInProgressRef.current = false;
-      return;
-    }
-
     const recorder = mediaRecorderRef.current;
-    const audioBlob = new Blob(finalChunks, {
-      type: recorder?.mimeType || 'audio/webm',
-    });
+    const mimeType = recorder?.mimeType || 'audio/webm';
 
-    const transcriptPayload = [...transcriptRef.current];
-    if (transcriptPayload.length === 0) {
-      transcriptRef.current.push({
-        promptIndex: 1,
-        text: activePrompt.text,
-        start: '00:00:00.000',
-        end: formatTime(recordingTime),
+    // Seal the last prompt's recording if it captured any data
+    if (finalChunks.length > 0) {
+      const lastEntry = transcriptRef.current[transcriptRef.current.length - 1];
+      const promptIndex = lastEntry
+        ? lastEntry.promptIndex
+        : currentPromptIndexRef.current + 1;
+      perPromptRecordingsRef.current.push({
+        promptIndex,
+        blob: new Blob(finalChunks, { type: mimeType }),
+        mimeType,
+        entry: lastEntry || null,
       });
     }
 
@@ -356,19 +361,22 @@ function App() {
     stopRequestedRef.current = false;
     clearWaveform();
 
-    const finalizedTranscript = transcriptPayload.length ? transcriptPayload : transcriptRef.current;
-    const audioUrl = URL.createObjectURL(audioBlob);
-    const sessionSnapshot = {
-      id: `${taskId}-${Date.now()}`,
-      taskId,
-      transcript: finalizedTranscript,
-      duration: recordingTime,
-      blob: audioBlob,
-      audioUrl,
-      createdAt: new Date().toISOString(),
-    };
-    setSavedRecordings((previous) => [sessionSnapshot, ...previous].slice(0, 10));
-    setStatus('Recording saved. Export when you are ready.');
+    // Build per-prompt savedRecordings entries
+    const newRecordings = perPromptRecordingsRef.current.map((rec) => {
+      const audioUrl = URL.createObjectURL(rec.blob);
+      return {
+        id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
+        taskId,
+        promptIndex: rec.promptIndex,
+        transcript: rec.entry ? [rec.entry] : [],
+        blob: rec.blob,
+        audioUrl,
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    setSavedRecordings((previous) => [...newRecordings, ...previous].slice(0, 100));
+    setStatus(`${newRecordings.length} task recording${newRecordings.length !== 1 ? 's' : ''} saved. Export when you are ready.`);
 
     const stream = streamRef.current;
     if (stream) {
@@ -377,6 +385,41 @@ function App() {
     }
 
     exportInProgressRef.current = false;
+  };
+
+  // Starts a fresh MediaRecorder on the existing stream for the given prompt index.
+  const startRecorderForPrompt = (promptIndex) => {
+    if (!streamRef.current) return;
+
+    const chunks = [];
+    recordedChunksRef.current = chunks;
+
+    const recorder = new MediaRecorder(streamRef.current);
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      // Seal this prompt's audio blob and attach its transcript entry
+      const finishedChunks = [...chunks];
+      if (finishedChunks.length === 0) return;
+
+      const mimeType = recorder.mimeType || 'audio/webm';
+      const entry = transcriptRef.current.find((e) => e.promptIndex === promptIndex) || null;
+      perPromptRecordingsRef.current.push({
+        promptIndex,
+        blob: new Blob(finishedChunks, { type: mimeType }),
+        mimeType,
+        entry,
+      });
+    };
+
+    recorder.start();
+    recorderReadyRef.current = true;
   };
 
   const requestRecordingPermission = async () => {
@@ -436,9 +479,10 @@ function App() {
   };
 
   const startActualRecording = async () => {
-    // Revoke previous preview URL and stop any active playback
-    const prevUrl = savedRecordingsRef.current[0]?.audioUrl;
-    if (prevUrl) URL.revokeObjectURL(prevUrl);
+    // Revoke previous preview URLs and stop any active playback
+    for (const rec of savedRecordingsRef.current) {
+      if (rec.audioUrl) URL.revokeObjectURL(rec.audioUrl);
+    }
     if (previewAudioRef.current) previewAudioRef.current.pause();
     setIsPlayingPreview(false);
 
@@ -452,33 +496,22 @@ function App() {
     }
 
     stopRequestedRef.current = false;
+    perPromptRecordingsRef.current = [];
+    recorderReadyRef.current = true;
     setIsRecording(true);
     setTranscript([]);
     transcriptRef.current = [];
     setStatus('Recording in progress');
 
     try {
-      const recorder = new MediaRecorder(streamRef.current);
-      const chunks = [];
-      recordedChunksRef.current = chunks;
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        await finalizeRecordingExport();
-      };
-
-      recorder.start();
       startRef.current = Date.now();
       promptStartRef.current = Date.now();
       pausedMsRef.current = 0;
       pauseStartedAtRef.current = 0;
       promptElapsedMsRef.current = 0;
+
+      // Start the first per-prompt recorder
+      startRecorderForPrompt(1);
 
       const tick = () => {
         if (stopRequestedRef.current) {
@@ -488,6 +521,11 @@ function App() {
         }
 
         if (isPausedRef.current) {
+          return;
+        }
+
+        // Don't process a boundary while a recorder hand-off is in progress
+        if (!recorderReadyRef.current) {
           return;
         }
 
@@ -530,6 +568,22 @@ function App() {
             promptStartRef.current = now;
             promptElapsedMsRef.current = 0;
             setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
+
+            // Hand-off: stop current recorder (seals its blob via onstop),
+            // then immediately start a fresh one for the next prompt.
+            recorderReadyRef.current = false;
+            const currentRecorder = mediaRecorderRef.current;
+            if (currentRecorder && currentRecorder.state !== 'inactive') {
+              // onstop fires → seals blob → then we start next recorder
+              const originalOnStop = currentRecorder.onstop;
+              currentRecorder.onstop = (e) => {
+                originalOnStop(e);
+                startRecorderForPrompt(nextIndex + 1);
+              };
+              currentRecorder.stop();
+            } else {
+              startRecorderForPrompt(nextIndex + 1);
+            }
           } else {
             clearInterval(timerRef.current);
             stopRecordingAndExport();
@@ -588,13 +642,15 @@ function App() {
     }
 
     if (recorder && recorder.state !== 'inactive') {
+      // Wire finalizeRecordingExport to fire after the last recorder seals its blob
+      const originalOnStop = recorder.onstop;
+      recorder.onstop = (e) => {
+        if (originalOnStop) originalOnStop(e);
+        finalizeRecordingExport();
+      };
       recorder.stop();
-    }
-
-    const stream = streamRef.current;
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+    } else {
+      finalizeRecordingExport();
     }
   };
 
@@ -684,48 +740,58 @@ function App() {
     downloadBlob(blob, toTranscriptFilename(taskIdValue));
   };
 
+  // Download all per-prompt audio and transcript files from the current session.
   const downloadSelectedPrompt = async () => {
-    const latestRecording = savedRecordings[0];
-
-    if (latestRecording?.blob) {
-      downloadBlob(latestRecording.blob, toWebmFilename(latestRecording.taskId || taskId));
+    if (savedRecordings.length === 0) {
+      setStatus('No recordings available for export.');
+      return;
     }
 
-    const entries = latestRecording?.transcript?.length
-      ? latestRecording.transcript
-      : (transcriptRef.current.length ? transcriptRef.current : initialPromptSequence.map((prompt, index) => ({
-          promptIndex: index + 1,
-          text: prompt.text,
-          start: '00:00:00.000',
-          end: formatTime(prompt.duration * 1000),
-        })));
+    // Determine which recordings to export
+    const recordingsToExport = downloadPromptIndex === 'all'
+      ? savedRecordings
+      : savedRecordings.filter((r) => r.promptIndex === Number(downloadPromptIndex) + 1);
 
-    const selectedPromptValue = Number(downloadPromptIndex);
-    const selectedEntries = downloadPromptIndex === 'all'
-      ? entries
-      : entries.filter((entry) => entry.promptIndex === selectedPromptValue + 1);
-
-    if (!selectedEntries.length) {
+    if (recordingsToExport.length === 0) {
       setStatus('No task text available for download.');
       return;
     }
 
-    const promptText = selectedEntries
-      .map((entry) => `${entry.text || `Task ${entry.promptIndex}`}\n${entry.start && entry.end ? `[${entry.start} -> ${entry.end}]` : ''}`)
-      .join('\n\n');
+    for (const rec of recordingsToExport) {
+      const effectiveTaskId = rec.taskId || taskId;
+      const label = `task${rec.promptIndex}_${effectiveTaskId}`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-    const filename = downloadPromptIndex === 'all'
-      ? toTranscriptFilename(latestRecording?.taskId || taskId)
-      : `task_${selectedPromptValue + 1}_${latestRecording?.taskId || taskId}.txt`;
+      // Audio file
+      if (rec.blob) {
+        downloadBlob(rec.blob, `${label}_${timestamp}.webm`);
+      }
 
-    const blob = new Blob([
-      `TASK ID: ${latestRecording?.taskId || taskId}\n`,
-      `Task selection: ${downloadPromptIndex === 'all' ? 'All tasks' : `Task ${selectedPromptValue + 1}`}\n\n`,
-      promptText,
-    ], { type: 'text/plain;charset=utf-8' });
+      // Transcript file
+      const entry = rec.transcript?.[0];
+      const lines = [
+        '========================================',
+        `TASK ID: ${effectiveTaskId}`,
+        `TASK: ${rec.promptIndex}`,
+        `USER: John Michael`,
+        `DATE: ${formatDateTime()}`,
+        '========================================',
+        '',
+        entry
+          ? `${entry.start && entry.end ? `[${entry.start} -> ${entry.end}] ` : ''}${entry.text || `Task ${rec.promptIndex}`}`
+          : `Task ${rec.promptIndex}`,
+        '',
+        '------------',
+      ];
+      const txtBlob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      downloadBlob(txtBlob, `${label}_${timestamp}_transcript.txt`);
+    }
 
-    downloadBlob(blob, filename);
-    setStatus(downloadPromptIndex === 'all' ? 'Recording and transcript exported' : `Task ${selectedPromptValue + 1} exported`);
+    setStatus(
+      downloadPromptIndex === 'all'
+        ? `All ${recordingsToExport.length} task files exported`
+        : `Task ${Number(downloadPromptIndex) + 1} exported`
+    );
     setIsExportMode(false);
   };
 
@@ -876,6 +942,7 @@ function App() {
       )}
 
       {page === 'recording' && (
+        <div className="recording-layout">
         <div className="recording-page panel glass">
           <div className="recording-header">
             <div>
@@ -999,15 +1066,31 @@ function App() {
 
           {savedRecordings.length > 0 && (
             <div className="saved-recordings">
-              <div className="saved-recordings-header">Saved recordings</div>
-              {savedRecordings.map((recording) => (
-                <div key={recording.id} className="saved-recording-item">
-                  <span>{recording.taskId}</span>
-                  <small>{recording.transcript.length} tasks • {formatTime(recording.duration)}</small>
-                </div>
-              ))}
+              <div className="saved-recordings-header">Saved recordings — {savedRecordings.length} task{savedRecordings.length !== 1 ? 's' : ''}</div>
+              {savedRecordings.map((recording) => {
+                const entry = recording.transcript?.[0];
+                const duration = entry?.start && entry?.end
+                  ? `${entry.start} → ${entry.end}`
+                  : null;
+                return (
+                  <div key={recording.id} className="saved-recording-item">
+                    <span>{recording.taskId} — Task {recording.promptIndex}</span>
+                    <small>{entry?.text ?? '—'}{duration ? ` • ${duration}` : ''}</small>
+                  </div>
+                );
+              })}
             </div>
           )}
+        </div>
+
+        <div className="export-sidebar panel glass">
+          <div className="export-sidebar-title">Export</div>
+          <button className="export-sidebar-btn export-sidebar-btn--timestamp"  onClick={() => {}}>Timestamp</button>
+          <button className="export-sidebar-btn export-sidebar-btn--individual" onClick={() => {}}>Individual Tasks</button>
+          <button className="export-sidebar-btn export-sidebar-btn--session"    onClick={() => {}}>Session</button>
+          <button className="export-sidebar-btn export-sidebar-btn--all"        onClick={() => {}}>All</button>
+        </div>
+
         </div>
       )}
     </div>

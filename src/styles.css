@@ -512,11 +512,110 @@ select:focus {
   font-size: 1rem;
 }
 
+/* ─── Recording layout (page + sidebar) ──────────────────────────── */
+.recording-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: min(1200px, 100%);
+}
+
 /* ─── Recording page ──────────────────────────────────────────────── */
 .recording-page {
-  width: min(980px, 100%);
+  flex: 1;
+  min-width: 0;
   padding: 30px 32px 26px;
 }
+
+/* ─── Export sidebar ──────────────────────────────────────────────── */
+.export-sidebar {
+  flex: 0 0 180px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  top: 20px;
+}
+
+.export-sidebar-title {
+  font-family: var(--font-body);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--slate);
+  opacity: 0.65;
+  margin-bottom: 2px;
+}
+
+.export-sidebar-btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px 10px 38px;
+  border-radius: 10px;
+  white-space: normal;
+  line-height: 1.35;
+  font-family: var(--font-body);
+  font-size: 0.83rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--navy);
+  background: rgba(255,255,255,0.78);
+  border: 1px solid rgba(148,163,184,0.28);
+  box-shadow: var(--shadow-card), var(--shadow-inset-top);
+  position: relative;
+  /* suppress the global translateY lift — full-width buttons shouldn't float */
+  transition:
+    background    0.18s ease-out,
+    border-color  0.18s ease-out,
+    box-shadow    0.18s ease-out;
+}
+
+/* Coloured left-edge accent bar */
+.export-sidebar-btn::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--btn-accent, var(--slate));
+  box-shadow: 0 0 6px var(--btn-accent, transparent);
+  transition: box-shadow 0.18s ease-out;
+}
+
+/* Suppress the global hover lift for these full-width buttons */
+.export-sidebar-btn:hover {
+  transform: none;
+  filter: none;
+  background: rgba(255,255,255,0.95);
+  border-color: var(--btn-accent, rgba(196,181,253,0.55));
+  box-shadow: 0 4px 14px rgba(15,23,42,0.07), var(--shadow-inset-top);
+}
+
+.export-sidebar-btn:hover::before {
+  box-shadow: 0 0 10px var(--btn-accent, transparent);
+}
+
+.export-sidebar-btn:active {
+  transform: none;
+  filter: none;
+  background: rgba(248,250,252,0.95);
+}
+
+.export-sidebar-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.38), var(--shadow-card);
+}
+
+/* Per-button accent colours */
+.export-sidebar-btn--timestamp  { --btn-accent: #0EA5E9; }
+.export-sidebar-btn--individual { --btn-accent: #A78BFA; }
+.export-sidebar-btn--session    { --btn-accent: #14B8A6; }
+.export-sidebar-btn--all        { --btn-accent: #F59E0B; }
 
 .recording-header {
   display: flex;
@@ -937,6 +1036,16 @@ select:focus {
 
 /* ─── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 700px) {
+  .recording-layout {
+    flex-direction: column;
+  }
+
+  .export-sidebar {
+    flex: none;
+    width: 100%;
+    position: static;
+  }
+
   .topbar,
   .recording-header,
   .task-input-row,
