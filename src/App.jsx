@@ -43,24 +43,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { mergeSavedRecordings } from './recordings';
 
 const promptEntries = [
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!',
-  'Hey Celia!'
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!',
+  'Hi Celia!'
 ];
 
 const promptTimings = [
@@ -145,12 +145,17 @@ const buildWaveformLevels = (data) =>
     return Math.max(18, Math.min(100, normalized * 1.7 + 10));
   });
 
+const getPageFromLocation = () => {
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  return pathname === '/recording-collection-software' ? 'recording' : 'login';
+};
+
 function App() {
-  const [page, setPage] = useState('login');
+  const [page, setPage] = useState(() => getPageFromLocation());
   const [pageHistory, setPageHistory] = useState([]);
   const [canGoForward, setCanGoForward] = useState(false);
   const [forwardPage, setForwardPage] = useState(null);
-  const [email, setEmail] = useState('john.michael@thot.ai');
+  const [email, setEmail] = useState('jarren.dave@thot.ai');
   const [password, setPassword] = useState('••••••••');
   const [taskId, setTaskId] = useState('TASK-1001');
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -197,6 +202,7 @@ function App() {
   const idleWaveformRef = useRef(null);
   const isPausedRef = useRef(false);
   const currentPromptIndexRef = useRef(0);
+  const transitionGapTimerRef = useRef(null);
   const frozenProgressRef = useRef(0);
   const frozenTimeRef = useRef(0);
   const frozenCompletedRef = useRef([]);
@@ -237,6 +243,21 @@ function App() {
   useEffect(() => {
     savedRecordingsRef.current = savedRecordings;
   }, [savedRecordings]);
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const nextPage = getPageFromLocation();
+      if (nextPage === 'recording') {
+        setPage('recording');
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -353,7 +374,15 @@ function App() {
     setupAudioWaveform(streamRef.current);
   };
 
-  const resetRecordingState = () => {
+  const resetRecordingState = ({ clearSavedRecordings = false } = {}) => {
+    if (clearSavedRecordings) {
+      for (const rec of savedRecordingsRef.current) {
+        if (rec.audioUrl) URL.revokeObjectURL(rec.audioUrl);
+      }
+      savedRecordingsRef.current = [];
+      setSavedRecordings([]);
+    }
+
     setIsRecording(false);
     setIsPaused(false);
     isPausedRef.current = false;
@@ -379,6 +408,10 @@ function App() {
     recorderReadyRef.current = true;
     clearInterval(timerRef.current);
     clearInterval(countdownRef.current);
+    if (transitionGapTimerRef.current) {
+      clearTimeout(transitionGapTimerRef.current);
+      transitionGapTimerRef.current = null;
+    }
     setCountdown(0);
   };
 
@@ -485,7 +518,8 @@ function App() {
 
     resetRecordingState();
     setIsStopped(false);
-    navigateTo('recording');
+    setPage('recording');
+    window.history.pushState({}, '', '/recording-collection-software');
     setCurrentPromptIndex(0);
     setActivePrompt(initialPromptSequence[0]);
     setStatus('Microphone ready. Press Record to begin.');
@@ -601,27 +635,37 @@ function App() {
           setCompletedPrompts((previous) => (previous.includes(currentIndex) ? previous : [...previous, currentIndex]));
 
           if (nextPrompt) {
-            setCurrentPromptIndex(nextIndex);
-            currentPromptIndexRef.current = nextIndex;
-            setActivePrompt(nextPrompt);
-            promptStartRef.current = now;
-            promptElapsedMsRef.current = 0;
-            setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
+            const gapMs = 2000;
+            setStatus(`Task ${currentIndex + 1} complete. Next task starts in ${gapMs / 1000}s...`);
 
-            // Hand-off: stop current recorder (seals its blob via onstop),
-            // then immediately start a fresh one for the next prompt.
             recorderReadyRef.current = false;
             const currentRecorder = mediaRecorderRef.current;
+            const resumeNextPrompt = () => {
+              setCurrentPromptIndex(nextIndex);
+              currentPromptIndexRef.current = nextIndex;
+              setActivePrompt(nextPrompt);
+              promptStartRef.current = Date.now();
+              promptElapsedMsRef.current = 0;
+              setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
+
+              startRecorderForPrompt(nextIndex + 1);
+              recorderReadyRef.current = true;
+            };
+
+            if (transitionGapTimerRef.current) {
+              clearTimeout(transitionGapTimerRef.current);
+            }
+            transitionGapTimerRef.current = setTimeout(() => {
+              transitionGapTimerRef.current = null;
+              resumeNextPrompt();
+            }, gapMs);
+
             if (currentRecorder && currentRecorder.state !== 'inactive') {
-              // onstop fires → seals blob → then we start next recorder
               const originalOnStop = currentRecorder.onstop;
               currentRecorder.onstop = (e) => {
-                originalOnStop(e);
-                startRecorderForPrompt(nextIndex + 1);
+                if (originalOnStop) originalOnStop(e);
               };
               currentRecorder.stop();
-            } else {
-              startRecorderForPrompt(nextIndex + 1);
             }
           } else {
             clearInterval(timerRef.current);
@@ -765,20 +809,40 @@ function App() {
   };
 
   const handleStartOver = () => {
-    resetRecordingState();
+    stopPlaybackAudio();
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.src = '';
+    }
+
+    setIsPlayingPreview(false);
     setIsStopped(false);
-    setSavedRecordings([]);
-    setPage('login');
     setPageHistory([]);
     setCanGoForward(false);
     setForwardPage(null);
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+
+    clearWaveform();
+    resetRecordingState({ clearSavedRecordings: true });
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.replace('/recording-collection-software');
   };
 
   const downloadTranscript = (taskIdValue, entries) => {
     const lines = [
       '========================================',
       `TASK ID: ${taskIdValue}`,
-      `USER: John Michael`,
+      `USER: Jarren Dave`,
       `DATE: ${formatDateTime()}`,
       '========================================',
       '',
@@ -806,7 +870,7 @@ function App() {
     return [
       '========================================',
       `TASK ID: ${taskId}`,
-      `USER: John Michael`,
+      `USER: Jarren Dave`,
       `DATE: ${formatDateTime()}`,
       '========================================',
       '',
@@ -1028,7 +1092,7 @@ function App() {
         '========================================',
         `TASK ID: ${effectiveTaskId}`,
         `TASK: ${rec.promptIndex}`,
-        `USER: John Michael`,
+        `USER: Jarren Dave`,
         `DATE: ${formatDateTime()}`,
         '========================================',
         '',
@@ -1083,6 +1147,11 @@ function App() {
   const navigateTo = (nextPage) => {
     setPageHistory((prev) => [...prev, page]);
     setPage(nextPage);
+    if (nextPage === 'recording') {
+      window.history.pushState({}, '', '/recording-collection-software');
+    } else {
+      window.history.pushState({}, '', '/');
+    }
     setCanGoForward(false);
     setForwardPage(null);
   };
@@ -1180,7 +1249,7 @@ function App() {
           <header className="topbar panel glass">
             <div>
               <span className="meta-label">User</span>
-              <div className="user-name">John Michael</div>
+              <div className="user-name">Jarren Dave</div>
             </div>
             <div className="access-badge">Employee</div>
             <div className="time-indicator">{localDateLabel}</div>
@@ -1219,7 +1288,7 @@ function App() {
           <div className="recording-header">
             <div>
               <div className="recording-tag">Recording Collection Software</div>
-              <h2>Hey Celia</h2>
+              <h2>Hi Celia</h2>
             </div>
             <div className="status-pill">{isStopped ? frozenStatusRef.current : status}</div>
           </div>
