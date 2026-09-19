@@ -142,7 +142,7 @@ const buildWaveformLevels = (data) =>
     }
 
     const normalized = (peak / 128) * 100;
-    return Math.max(18, Math.min(100, normalized * 1.2 + 8));
+    return Math.max(18, Math.min(100, normalized * 1.7 + 10));
   });
 
 function App() {
@@ -194,6 +194,7 @@ function App() {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const idleWaveformRef = useRef(null);
   const isPausedRef = useRef(false);
   const currentPromptIndexRef = useRef(0);
   const frozenProgressRef = useRef(0);
@@ -221,7 +222,16 @@ function App() {
     if (!('MediaRecorder' in window)) {
       setIsAudioSupported(false);
       setStatus('Microphone recording is not supported by this browser.');
+      return undefined;
     }
+
+    startIdleWaveform();
+    return () => {
+      if (idleWaveformRef.current) {
+        cancelAnimationFrame(idleWaveformRef.current);
+        idleWaveformRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -248,14 +258,43 @@ function App() {
     return () => finishTranscriptEntry();
   }, []);
 
+  const startIdleWaveform = () => {
+    if (idleWaveformRef.current || analyserRef.current) return;
+
+    const tick = () => {
+      if (analyserRef.current) {
+        idleWaveformRef.current = null;
+        return;
+      }
+
+      const now = Date.now() / 1000;
+      setWaveformLevels(
+        Array.from({ length: 8 }, (_, index) => {
+          const value = 24 + Math.sin(now * 3 + index * 0.8) * 18 + Math.sin(now * 6 + index) * 8;
+          return Math.max(18, Math.min(100, value));
+        })
+      );
+
+      idleWaveformRef.current = requestAnimationFrame(tick);
+    };
+
+    idleWaveformRef.current = requestAnimationFrame(tick);
+  };
+
   const clearWaveform = () => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
 
+    if (idleWaveformRef.current) {
+      cancelAnimationFrame(idleWaveformRef.current);
+      idleWaveformRef.current = null;
+    }
+
     setWaveformLevels(Array.from({ length: 8 }, () => 22));
     analyserRef.current = null;
+    startIdleWaveform();
 
     if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => undefined);
@@ -265,6 +304,11 @@ function App() {
 
   const setupAudioWaveform = (stream) => {
     if (!stream) return;
+
+    if (idleWaveformRef.current) {
+      cancelAnimationFrame(idleWaveformRef.current);
+      idleWaveformRef.current = null;
+    }
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
@@ -302,6 +346,11 @@ function App() {
       cancelAnimationFrame(animationFrameRef.current);
     }
     animationFrameRef.current = requestAnimationFrame(updateWaveform);
+  };
+
+  const restartLiveWaveform = () => {
+    if (!streamRef.current) return;
+    setupAudioWaveform(streamRef.current);
   };
 
   const resetRecordingState = () => {
@@ -482,7 +531,7 @@ function App() {
     }
 
     if (streamRef.current) {
-      setupAudioWaveform(streamRef.current);
+      restartLiveWaveform();
     }
 
     stopRequestedRef.current = false;
@@ -671,6 +720,8 @@ function App() {
       if (tickRef.current && !timerRef.current) {
         timerRef.current = setInterval(tickRef.current, 100);
       }
+
+      restartLiveWaveform();
 
       const pauseDuration = Date.now() - pauseStartedAtRef.current;
       pausedMsRef.current += pauseDuration;
