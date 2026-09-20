@@ -35,7 +35,6 @@ import { useRef, useState } from 'react';
 
 import { initialPromptSequence } from '../data/prompts.js';
 import {
-  TASK_TRANSITION_GAP_MS,
   getAdjustedElapsedMs,
   getRemainingTransitionMs,
   getResumedPromptStartTimestamp,
@@ -214,9 +213,9 @@ export const useTimers = ({
     tickRef.current = null;
   };
 
-  // --- Inter-task transition countdown (2s, pause-aware) ---------------------
+  // --- Inter-task transition countdown (per-task buffer, pause-aware) --------
 
-  const beginTransitionCountdown = ({ gapMs = TASK_TRANSITION_GAP_MS, onComplete }) => {
+  const beginTransitionCountdown = ({ gapMs, onComplete }) => {
     setTransitionCountdown(gapMs);
     transitionStartedAtRef.current = Date.now();
     transitionPauseStartedAtRef.current = Date.now();

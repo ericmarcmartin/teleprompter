@@ -44,7 +44,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { initialPromptSequence } from '../data/prompts.js';
 import { mergeSavedRecordings } from '../recordings.js';
-import { TASK_TRANSITION_GAP_MS, getTaskWindowMs } from '../timing.js';
+import { getTaskWindowMs } from '../timing.js';
 import { formatTime } from '../utils/format.js';
 import { useRecorder } from './useRecorder.js';
 import { useTimers } from './useTimers.js';
@@ -229,7 +229,8 @@ export const useRecordingSession = ({ taskId, playback }) => {
     markPromptCompleted(currentIndex);
 
     if (nextPrompt) {
-      const gapMs = TASK_TRANSITION_GAP_MS;
+      // Per-task buffer: transition gap after THIS task (seconds → ms).
+      const gapMs = (currentItem.buffer ?? 0) * 1000;
       setStatus(`Task ${currentIndex + 1} complete. Next task starts in ${gapMs / 1000}s...`);
 
       setCurrentPromptIndex(nextIndex);
