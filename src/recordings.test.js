@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mergeSavedRecordings } from './recordings.js';
+import { mergeSavedRecordings, shouldKeepRecordingChunk } from './recordings.js';
 
 test('keeps only the latest audio per prompt index and preserves order', () => {
   const previous = [
@@ -35,4 +35,10 @@ test('stops mid-task without creating a partial saved recording', () => {
 
   assert.equal(merged.length, 3);
   assert.equal(merged[2].id, 'partial');
+});
+
+test('keeps the final prompt audio when the recording is being stopped at the end', () => {
+  assert.equal(shouldKeepRecordingChunk({ stopRequested: true, promptIndex: 10, totalPrompts: 10 }), true);
+  assert.equal(shouldKeepRecordingChunk({ stopRequested: true, promptIndex: 9, totalPrompts: 10 }), false);
+  assert.equal(shouldKeepRecordingChunk({ stopRequested: false, promptIndex: 10, totalPrompts: 10 }), true);
 });
