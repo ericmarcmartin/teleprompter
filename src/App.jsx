@@ -401,6 +401,7 @@ function App() {
   const currentPromptIndexRef = useRef(0);
   const transitionGapTimerRef = useRef(null);
   const transitionCountdownRef = useRef(null);
+  const transitionCountdownMsRef = useRef(0);
   const transitionStartedAtRef = useRef(0);
   const transitionPauseStartedAtRef = useRef(0);
   const transitionPausedAtRef = useRef(0);
@@ -425,6 +426,10 @@ function App() {
   useEffect(() => {
     currentPromptIndexRef.current = currentPromptIndex;
   }, [currentPromptIndex]);
+
+  useEffect(() => {
+    transitionCountdownMsRef.current = transitionCountdownMs;
+  }, [transitionCountdownMs]);
 
   useEffect(() => {
     if (!('MediaRecorder' in window)) {
@@ -623,6 +628,7 @@ function App() {
     transitionStartedAtRef.current = 0;
     transitionPauseStartedAtRef.current = 0;
     transitionPausedAtRef.current = 0;
+    transitionCountdownMsRef.current = 0;
     setCountdown(0);
     setTransitionCountdownMs(0);
   };
@@ -827,6 +833,11 @@ function App() {
           return;
         }
 
+        // FREEZE timer and progress during inter-task transition buffer
+        if (transitionCountdownMsRef.current > 0) {
+          return;
+        }
+
         const now = Date.now();
         const currentIndex = currentPromptIndexRef.current;
         const currentItem = initialPromptSequence[currentIndex];
@@ -886,6 +897,14 @@ function App() {
               promptElapsedMsRef.current = 0;
               setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
 
+              // Unmute the microphone now that the inter-task gap is over,
+              // right before the next task's recorder starts.
+              if (streamRef.current) {
+                streamRef.current.getAudioTracks().forEach((track) => {
+                  track.enabled = true;
+                });
+              }
+
               startRecorderForPrompt(nextIndex + 1);
               recorderReadyRef.current = true;
             };
@@ -916,6 +935,15 @@ function App() {
             }, 100);
 
             recorderReadyRef.current = false;
+
+            // Mute the microphone during the 2s inter-task gap so no audio
+            // is captured while the next task is being prepared.
+            if (streamRef.current) {
+              streamRef.current.getAudioTracks().forEach((track) => {
+                track.enabled = false;
+              });
+            }
+
             const currentRecorder = mediaRecorderRef.current;
 
             if (currentRecorder && currentRecorder.state !== 'inactive') {
@@ -943,9 +971,12 @@ function App() {
           }
         }
 
-        const elapsed = now - startRef.current - pausedMsRef.current;
-        setRecordingTime(elapsed);
-        setProgress(newProgress);
+        // Only update timer and progress when NOT in a transition buffer
+        if (transitionCountdownMsRef.current <= 0) {
+          const elapsed = now - startRef.current - pausedMsRef.current;
+          setRecordingTime(elapsed);
+          setProgress(newProgress);
+        }
       };
 
       tickRef.current = tick;
