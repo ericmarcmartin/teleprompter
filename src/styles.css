@@ -876,10 +876,44 @@ select:focus {
 
 /* ─── Prompt selector grid ────────────────────────────────────────── */
 .prompt-selector {
+  /* Row cap: change --prompt-rows to adjust the default visible height */
+  --prompt-rows: 4;
+  --prompt-row-h: 52px;
+
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 9px;
   margin: 10px 0 20px;
+  padding: 4px;
+
+  /* Cap at --prompt-rows visible rows; scroll the overflow */
+  max-height: calc(var(--prompt-rows) * var(--prompt-row-h) + (var(--prompt-rows) - 1) * 9px + 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  /* Drag the bottom-right corner to adjust the visible height (1–4 rows) */
+  resize: vertical;
+  min-height: calc(var(--prompt-row-h) + 12px);
+
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.45) transparent;
+}
+
+.prompt-selector::-webkit-scrollbar {
+  width: 8px;
+}
+
+.prompt-selector::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prompt-selector::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.40);
+  border-radius: 999px;
+}
+
+.prompt-selector::-webkit-scrollbar-thumb:hover {
+  background: rgba(124,58,237,0.45);
 }
 
 .prompt-box {

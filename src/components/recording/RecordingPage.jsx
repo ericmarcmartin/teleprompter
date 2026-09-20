@@ -107,6 +107,39 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
           <div className="progress-fill" style={{ width: `${isStopped ? frozenProgressRef.current : progress}%` }} />
         </div>
 
+        <div className="controls">
+          {!isRecording && !countdown && !isStopped ? (
+            <button className="primary" onClick={startCountdownAndRecording}>Record</button>
+          ) : null}
+          {isStopped && (
+            <>
+              <button className="secondary" onClick={handleReRecord}>Re-record Task</button>
+              <button className="danger" onClick={onStartOver}>Start Over</button>
+            </>
+          )}
+          {/* {!isRecording && !countdown && savedRecordings.length > 0 && (
+            <button
+              className={`preview-play-btn${playback.isPlayingPreview ? ' playing' : ''}`}
+              onClick={() => playback.handleTogglePreview(savedRecordings[0]?.audioUrl)}
+              aria-label={playback.isPlayingPreview ? 'Pause preview' : 'Play preview'}
+              title={playback.isPlayingPreview ? 'Pause preview' : 'Play recording'}
+            >
+              {playback.isPlayingPreview ? '⏸' : '▶'}
+            </button>
+          )} */}
+          {isRecording && (
+            <>
+              <button className="secondary" onClick={handlePauseResume}>
+                {isPaused ? 'Resume' : 'Pause'}
+              </button>
+              <button className="danger" onClick={stopRecordingAndExport}>Stop</button>
+            </>
+          )}
+          {/* <button className="ghost compact export-toggle" onClick={() => setIsExportMode((previous) => !previous)}>
+            {isExportMode ? 'Close export' : 'Export'}
+          </button> */}
+        </div>
+
         <PromptSelector
           prompts={initialPromptSequence}
           isExportMode={isExportMode}
@@ -125,38 +158,6 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
               style={{ display: 'none' }}
             />
           )}
-          <div className="controls">
-            {!isRecording && !countdown && !isStopped ? (
-              <button className="primary" onClick={startCountdownAndRecording}>Record</button>
-            ) : null}
-            {isStopped && (
-              <>
-                <button className="secondary" onClick={handleReRecord}>Re-record Task</button>
-                <button className="danger" onClick={onStartOver}>Start Over</button>
-              </>
-            )}
-            {/* {!isRecording && !countdown && savedRecordings.length > 0 && (
-              <button
-                className={`preview-play-btn${playback.isPlayingPreview ? ' playing' : ''}`}
-                onClick={() => playback.handleTogglePreview(savedRecordings[0]?.audioUrl)}
-                aria-label={playback.isPlayingPreview ? 'Pause preview' : 'Play preview'}
-                title={playback.isPlayingPreview ? 'Pause preview' : 'Play recording'}
-              >
-                {playback.isPlayingPreview ? '⏸' : '▶'}
-              </button>
-            )} */}
-            {isRecording && (
-              <>
-                <button className="secondary" onClick={handlePauseResume}>
-                  {isPaused ? 'Resume' : 'Pause'}
-                </button>
-                <button className="danger" onClick={stopRecordingAndExport}>Stop</button>
-              </>
-            )}
-            {/* <button className="ghost compact export-toggle" onClick={() => setIsExportMode((previous) => !previous)}>
-              {isExportMode ? 'Close export' : 'Export'}
-            </button> */}
-          </div>
 
           {isExportMode && (
             <div className="download-actions">
