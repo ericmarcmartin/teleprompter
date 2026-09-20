@@ -14,6 +14,9 @@ import SavedRecordingsList from './SavedRecordingsList.jsx';
 import TeleprompterDisplay from './TeleprompterDisplay.jsx';
 import Waveform from './Waveform.jsx';
 
+// Static summary stat for the completion state — derived from constant data.
+const TOTAL_DURATION_MS = initialPromptSequence.reduce((sum, p) => sum + p.duration, 0) * 1000;
+
 // Assembles the recording page from the session hook (state + handlers), the
 // playback hook, and the recording subcomponents. While session.isStopped is
 // true, all stop-moment display values come from the session's frozen refs —
@@ -31,6 +34,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     activePrompt,
     completedPrompts,
     savedRecordings,
+    isSessionComplete,
     countdown,
     transitionCountdownMs,
     recordingTime,
@@ -95,6 +99,9 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
           transitionCountdownMs={transitionCountdownMs}
           isRecording={isRecording}
           isStopped={isStopped}
+          isSessionComplete={isSessionComplete}
+          totalTasks={initialPromptSequence.length}
+          totalDurationMs={TOTAL_DURATION_MS}
           countdown={countdown}
           currentPromptIndex={currentPromptIndex}
           promptText={activePrompt.text}

@@ -38,12 +38,46 @@ const TransitionBuffer = ({ transitionCountdownMs }) => (
   </div>
 );
 
+// Shown once the final task completes naturally (not on a manual Stop):
+// one-shot success ring + summary. All motion resolves to rest — no loops.
+const SessionComplete = ({ totalTasks, totalDurationMs }) => (
+  <div className="session-complete" role="status" aria-live="polite">
+    <div className="success-ring">
+      <svg viewBox="0 0 100 100" className="success-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="success-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#C4B5FD" />
+            <stop offset="50%" stopColor="#0EA5E9" />
+            <stop offset="100%" stopColor="#14B8A6" />
+          </linearGradient>
+        </defs>
+
+        {/* Faint full-circle track */}
+        <circle cx="50" cy="50" r="42" className="success-track" />
+
+        {/* Gradient arc draws once to 100% (circumference ~264) */}
+        <circle cx="50" cy="50" r="42" className="success-arc" />
+
+        {/* Check draws in after the arc completes */}
+        <path d="M33 52 L45 64 L68 39" className="success-check" />
+      </svg>
+    </div>
+
+    <div className="prompt-index">All {totalTasks} tasks recorded</div>
+    <div className="prompt-text prompt-text--complete">Session complete</div>
+    <div className="session-complete-meta">{formatTime(totalDurationMs)} total</div>
+  </div>
+);
+
 // timerMs must already be the frozen value when stopped (freeze-on-stop
 // invariant — this component never decides which value to show).
 const TeleprompterDisplay = ({
   transitionCountdownMs,
   isRecording,
   isStopped,
+  isSessionComplete,
+  totalTasks,
+  totalDurationMs,
   countdown,
   currentPromptIndex,
   promptText,
@@ -52,6 +86,8 @@ const TeleprompterDisplay = ({
   <div className="teleprompter-display">
     {transitionCountdownMs > 0 ? (
       <TransitionBuffer transitionCountdownMs={transitionCountdownMs} />
+    ) : isSessionComplete ? (
+      <SessionComplete totalTasks={totalTasks} totalDurationMs={totalDurationMs} />
     ) : isRecording || isStopped || countdown > 0 ? (
       <>
         <div className="prompt-index">Task {currentPromptIndex + 1}</div>

@@ -65,6 +65,10 @@ export const useRecordingSession = ({ taskId, playback }) => {
   const [completedPrompts, setCompletedPrompts] = useState([]);
   const [transcript, setTranscript] = useState([]);
   const [savedRecordings, setSavedRecordings] = useState([]);
+  // True only when the timer crossed the FINAL task boundary naturally —
+  // a manual Stop (even on the last task) leaves this false so the display
+  // can distinguish "session complete" from "stopped early".
+  const [isSessionComplete, setIsSessionComplete] = useState(false);
 
   const isPausedRef = useRef(false);
   const isStoppedRef = useRef(false);
@@ -262,6 +266,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     const finishedElapsed = currentItem.duration * 1000;
     recorder.stopRequestedRef.current = true;
     setIsStopped(true);
+    setIsSessionComplete(true);
     setStatus('Recording finished.');
     frozenStatusRef.current = 'Recording finished.';
     timers.setProgress(100);
@@ -402,6 +407,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     setIsRecording(false);
     setIsPaused(false);
     isPausedRef.current = false;
+    setIsSessionComplete(false);
     timers.resetTimers();
     setCurrentPromptIndex(0);
     currentPromptIndexRef.current = 0;
@@ -455,6 +461,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     transcript,
     savedRecordings,
     isAudioSupported,
+    isSessionComplete,
     countdown: timers.countdown,
     transitionCountdownMs: timers.transitionCountdownMs,
     recordingTime: timers.recordingTime,
