@@ -40,7 +40,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { mergeSavedRecordings } from './recordings';
+import { mergeSavedRecordings, shouldKeepRecordingChunk } from './recordings';
 import { getRemainingTransitionMs } from './timing';
 
 const promptEntries = [
@@ -48,215 +48,216 @@ const promptEntries = [
   'Hey Celia!',
   'Hi Celia!',
   'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!',
-  'Hi Celia!',
-  'Hey Celia!'
+  'Hi Celia!'
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!'
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!',
+  // 'Hi Celia!',
+  // 'Hey Celia!'
 ];
 
 const promptTimings = [
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+  2, 2, 2, 2, 2
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  // 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 ];
 
 const taskOptions = [
@@ -355,7 +356,10 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  // IMPORTANT: freeze the final timer value once recording stops. Do not replace
+  // this with a live timer render unless the user explicitly requests a change.
   const [recordingTime, setRecordingTime] = useState(0);
+  const [frozenTimerMs, setFrozenTimerMs] = useState(0);
   const [completedPrompts, setCompletedPrompts] = useState([]);
   const [downloadPromptIndex, setDownloadPromptIndex] = useState('all');
   const [isExportMode, setIsExportMode] = useState(false);
@@ -405,6 +409,7 @@ function App() {
   const frozenCompletedRef = useRef([]);
   const frozenActiveIndexRef = useRef(0);
   const frozenStatusRef = useRef('');
+  const timerFrozenRef = useRef(false);
   // Per-prompt recording storage: array of { promptIndex, blob, mimeType, entry }
   const perPromptRecordingsRef = useRef([]);
   // Blocks the tick from triggering another boundary crossing while a recorder
@@ -584,6 +589,7 @@ function App() {
     setIsPaused(false);
     isPausedRef.current = false;
     setRecordingTime(0);
+    setFrozenTimerMs(0);
     setProgress(0);
     setCurrentPromptIndex(0);
     currentPromptIndexRef.current = 0;
@@ -601,6 +607,7 @@ function App() {
     frozenCompletedRef.current = [];
     frozenActiveIndexRef.current = 0;
     frozenStatusRef.current = '';
+    timerFrozenRef.current = false;
     perPromptRecordingsRef.current = [];
     recorderReadyRef.current = true;
     clearInterval(timerRef.current);
@@ -681,7 +688,14 @@ function App() {
 
     recorder.onstop = () => {
       const finishedChunks = [...chunks];
-      if (stopRequestedRef.current || finishedChunks.length === 0) {
+      const isFinalPrompt = promptIndex >= initialPromptSequence.length;
+      const shouldSaveChunk = shouldKeepRecordingChunk({
+        stopRequested: stopRequestedRef.current,
+        promptIndex,
+        totalPrompts: initialPromptSequence.length,
+      });
+
+      if (!shouldSaveChunk || finishedChunks.length === 0) {
         return;
       }
 
@@ -693,6 +707,12 @@ function App() {
         mimeType,
         entry,
       });
+
+      if (isFinalPrompt) {
+        setStatus('Recording finished.');
+        setIsStopped(true);
+        frozenStatusRef.current = 'Recording finished.';
+      }
     };
 
     recorder.start();
@@ -792,7 +812,7 @@ function App() {
       startRecorderForPrompt(1);
 
       const tick = () => {
-        if (stopRequestedRef.current) {
+        if (timerFrozenRef.current || stopRequestedRef.current || isStopped) {
           clearInterval(timerRef.current);
           timerRef.current = null;
           return;
@@ -808,9 +828,6 @@ function App() {
         }
 
         const now = Date.now();
-        const elapsed = now - startRef.current - pausedMsRef.current;
-        setRecordingTime(elapsed);
-
         const currentIndex = currentPromptIndexRef.current;
         const currentItem = initialPromptSequence[currentIndex];
         if (!currentItem) {
@@ -821,7 +838,6 @@ function App() {
         const elapsedInPrompt = now - promptStart;
         const durationMs = currentItem.duration * 1000;
         const newProgress = Math.min((elapsedInPrompt / durationMs) * 100, 100);
-        setProgress(newProgress);
 
         if (elapsedInPrompt >= durationMs) {
           const nextIndex = currentIndex + 1;
@@ -910,10 +926,26 @@ function App() {
               currentRecorder.stop();
             }
           } else {
+            const finishedElapsed = Date.now() - startRef.current - pausedMsRef.current;
+            timerFrozenRef.current = true;
+            stopRequestedRef.current = true;
+            frozenTimeRef.current = finishedElapsed;
+            setFrozenTimerMs(finishedElapsed);
             clearInterval(timerRef.current);
+            timerRef.current = null;
+            setIsStopped(true);
+            setRecordingTime(finishedElapsed);
+            setStatus('Recording finished.');
+            frozenStatusRef.current = 'Recording finished.';
+            setProgress(100);
             stopRecordingAndExport();
+            return;
           }
         }
+
+        const elapsed = now - startRef.current - pausedMsRef.current;
+        setRecordingTime(elapsed);
+        setProgress(newProgress);
       };
 
       tickRef.current = tick;
@@ -929,9 +961,9 @@ function App() {
   const stopRecordingAndExport = () => {
     // Snapshot exact values into refs BEFORE any async work or state batching
     const now = Date.now();
-    if (startRef.current) {
-      frozenTimeRef.current = now - startRef.current - pausedMsRef.current;
-    }
+    const finalElapsed = startRef.current ? now - startRef.current - pausedMsRef.current : 0;
+    frozenTimeRef.current = finalElapsed;
+
     const currentIndex = currentPromptIndexRef.current;
     const currentItem = initialPromptSequence[currentIndex];
     if (currentItem && promptStartRef.current) {
@@ -941,13 +973,17 @@ function App() {
     }
     frozenCompletedRef.current = [...completedPrompts];
     frozenActiveIndexRef.current = currentPromptIndexRef.current;
-    frozenStatusRef.current = status;
+    frozenStatusRef.current = currentIndex >= initialPromptSequence.length - 1 ? 'Recording finished.' : status;
 
+    timerFrozenRef.current = true;
     stopRequestedRef.current = true;
+    frozenTimeRef.current = finalElapsed;
+    setFrozenTimerMs(finalElapsed);
     setIsRecording(false);
     setIsPaused(false);
     isPausedRef.current = false;
     setIsStopped(true);
+    setRecordingTime(finalElapsed);
 
     const recorder = mediaRecorderRef.current;
 
@@ -1594,7 +1630,7 @@ function App() {
       <div className="prompt-index">Task {currentPromptIndex + 1}</div>
       <div className="prompt-text">{activePrompt.text}</div>
       <div className="prompt-timer">
-        {countdown > 0 ? `Starts in ${countdown}` : formatTime(isStopped ? frozenTimeRef.current : recordingTime)}
+        {countdown > 0 ? `Starts in ${countdown}` : formatTime(isStopped ? frozenTimerMs : recordingTime)}
       </div>
     </>
   ) : (
