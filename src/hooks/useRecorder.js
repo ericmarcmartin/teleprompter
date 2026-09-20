@@ -67,7 +67,10 @@ export const useRecorder = ({
       }
     };
 
-    recorder.start();
+    // 100ms timeslice: chunks flush throughout the prompt and the capture
+    // timeline is anchored to the start() call, so the recorder aligns with
+    // the session clock and progress bar.
+    recorder.start(100);
     recorderReadyRef.current = true;
   };
 

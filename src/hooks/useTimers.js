@@ -1,18 +1,29 @@
 // =============================================================================
 // SINGLE TIMER HOME — every timer/clock in the app lives in this hook.
 //
-// All setInterval loops and all timing refs/state are owned here so timing
+// All timer loops and all timing refs/state are owned here so timing
 // behavior can be tracked in one place:
-//   - Recording tick (100ms)     — timerRef / tickRef
-//   - 3-2-1 pre-record countdown — countdownRef
-//   - Inter-task transition (2s) — transitionCountdownRef
+//   - Recording tick            — self-rescheduling setTimeout chain
+//                                 (timerRef / tickRef); reschedules at
+//                                 min(100ms, time-to-boundary) so prompt
+//                                 boundaries land on exact seconds, and fires
+//                                 one synchronous tick from beginTick and
+//                                 completeTransition so recorder, clock, and
+//                                 progress bar start in the same frame
+//   - 3-2-1 pre-record countdown — countdownRef (setInterval)
+//   - Inter-task transition (2s) — transitionCountdownRef (setTimeout chain,
+//                                 completes at exactly gapMs)
 //   - Timing refs: startRef, promptStartRef, promptElapsedMsRef, pausedMsRef,
 //     pauseStartedAtRef, transitionStartedAtRef, transitionPauseStartedAtRef,
 //     transitionPausedAtRef, transitionCountdownMsRef, timerFrozenRef
 //   - Frozen stop-moment display refs: frozenTimeRef, frozenProgressRef
 //     (part of the freeze-on-stop invariant — see useRecordingSession.js)
 //
-// Pure elapsed/remaining math stays in src/timing.js (unit-tested). The
+// recordingTime / frozenTimerMs are PER-TASK values: the on-screen
+// prompt-timer runs 00:00:00.000 → exactly the task duration (e.g.
+// 00:00:02.000) for each task and resets at every boundary.
+//
+// Pure elapsed/remaining/window math stays in src/timing.js (unit-tested). The
 // waveform requestAnimationFrame loops are visualization, not timers, and
 // live in useWaveform.js.
 //
@@ -37,8 +48,8 @@ export const useTimers = ({
   isStoppedRef,
   currentPromptIndexRef,
 }) => {
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [frozenTimerMs, setFrozenTimerMs] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0); // per-task elapsed ms
+  const [frozenTimerMs, setFrozenTimerMs] = useState(0); // per-task, frozen at stop
   const [progress, setProgress] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [transitionCountdownMs, setTransitionCountdownMs] = useState(0);
@@ -104,23 +115,35 @@ export const useTimers = ({
     setCountdown(0);
   };
 
-  // --- Recording tick (100ms) ------------------------------------------------
-  // The tick owns the clock only. When a prompt boundary is crossed it calls
-  // onBoundary (session code) which decides what the boundary means; if the
-  // session reports the final prompt, the tick stops updating afterwards.
+  // --- Recording tick (self-rescheduling setTimeout chain) -------------------
+  // The tick owns the per-task clock and progress bar. When a prompt boundary
+  // is crossed it calls onBoundary (session code) which decides what the
+  // boundary means; if the session reports the final prompt, the tick stops
+  // updating afterwards.
+  //
+  // The chain reschedules itself at min(100ms, time-to-boundary) so boundary
+  // crossings land exactly on the prompt's exact-second end (e.g. 2.000s)
+  // instead of drifting by up to one 100ms interval.
+
+  const scheduleNextTick = (delayMs) => {
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      tickRef.current?.();
+    }, delayMs);
+  };
 
   const beginTick = ({ onBoundary }) => {
-    // Defensive: never allow two ticks to run concurrently. A leftover tick
-    // would keep driving boundary crossings against reset (zeroed) timing
+    // Defensive: never allow two tick chains to run concurrently. A leftover
+    // chain would keep driving boundary crossings against reset (zeroed) timing
     // refs after Re-record, instantly "completing" prompts.
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
     const tick = () => {
       if (timerFrozenRef.current || stopRequestedRef.current || isStoppedRef.current) {
-        clearInterval(timerRef.current);
+        clearTimeout(timerRef.current);
         timerRef.current = null;
         return;
       }
@@ -131,11 +154,13 @@ export const useTimers = ({
 
       // Don't process a boundary while a recorder hand-off is in progress
       if (!recorderReadyRef.current) {
+        scheduleNextTick(100);
         return;
       }
 
       // FREEZE timer and progress during inter-task transition buffer
       if (transitionCountdownMsRef.current > 0) {
+        scheduleNextTick(100);
         return;
       }
 
@@ -143,6 +168,7 @@ export const useTimers = ({
       const currentIndex = currentPromptIndexRef.current;
       const currentItem = initialPromptSequence[currentIndex];
       if (!currentItem) {
+        scheduleNextTick(100);
         return;
       }
 
@@ -151,32 +177,39 @@ export const useTimers = ({
       const durationMs = currentItem.duration * 1000;
       const newProgress = Math.min((elapsedInPrompt / durationMs) * 100, 100);
 
-      // Captured BEFORE onBoundary: the boundary handler starts the transition
-      // countdown synchronously, and the final timer/progress update below must
-      // still run on the boundary tick (as it did before the split).
-      const transitionActive = transitionCountdownMsRef.current > 0;
-
       if (elapsedInPrompt >= durationMs) {
+        // Snapshot the exact boundary-moment display values BEFORE onBoundary
+        // runs: the handler starts the transition countdown synchronously, and
+        // the final timer/progress update must still land on this tick.
+        setRecordingTime(durationMs);
+        setProgress(100);
+
         const result = onBoundary({ now, currentIndex, currentItem, promptStartMs: promptStart });
         if (result?.final) {
           return;
         }
+
+        // Gap ticks continue so the chain wakes promptly if the session is
+        // paused or stopped during the transition buffer.
+        scheduleNextTick(100);
+        return;
       }
 
-      // Only update timer and progress when NOT in a transition buffer
-      if (!transitionActive) {
-        const elapsed = getAdjustedElapsedMs(now, startRef.current, pausedMsRef.current);
-        setRecordingTime(elapsed);
-        setProgress(newProgress);
-      }
+      // Per-task clock: reads 00:00:00.000 at task start, exactly the task
+      // duration (e.g. 00:00:02.000) at the boundary.
+      setRecordingTime(elapsedInPrompt);
+      setProgress(newProgress);
+      scheduleNextTick(Math.min(100, durationMs - elapsedInPrompt));
     };
 
     tickRef.current = tick;
-    timerRef.current = setInterval(tick, 100);
+    // Fire one synchronous tick so the recorder, clock, and progress bar all
+    // start in the same frame.
+    tick();
   };
 
   const stopTick = () => {
-    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
     timerRef.current = null;
     tickRef.current = null;
   };
@@ -190,14 +223,20 @@ export const useTimers = ({
     transitionPausedAtRef.current = 0;
 
     if (transitionCountdownRef.current) {
-      clearInterval(transitionCountdownRef.current);
+      clearTimeout(transitionCountdownRef.current);
     }
 
-    transitionCountdownRef.current = setInterval(() => {
+    // Self-rescheduling chain: each pass waits min(100ms, remainingMs) so the
+    // completion callback fires at exactly gapMs and the next recorder starts
+    // on the exact millisecond the gap ends.
+    const transitionTick = () => {
+      transitionCountdownRef.current = null;
+
       if (isPausedRef.current) {
         if (transitionPausedAtRef.current === 0) {
           transitionPausedAtRef.current = Date.now();
         }
+        transitionCountdownRef.current = setTimeout(transitionTick, 100);
         return;
       }
 
@@ -212,16 +251,20 @@ export const useTimers = ({
       setTransitionCountdown(remainingMs);
 
       if (remainingMs <= 0) {
-        clearInterval(transitionCountdownRef.current);
-        transitionCountdownRef.current = null;
         onComplete();
+        return;
       }
-    }, 100);
+
+      transitionCountdownRef.current = setTimeout(transitionTick, Math.min(100, remainingMs));
+    };
+
+    transitionCountdownRef.current = setTimeout(transitionTick, 100);
   };
 
   // Called when the transition gap ends: the gap time is folded into pausedMs
   // so it never counts toward the recording total, and the next prompt's clock
-  // starts fresh.
+  // starts fresh. The tick is invoked synchronously so the new task's timer,
+  // progress bar, and recorder all start in the same frame.
   const completeTransition = () => {
     if (transitionPauseStartedAtRef.current > 0) {
       pausedMsRef.current += Date.now() - transitionPauseStartedAtRef.current;
@@ -233,13 +276,17 @@ export const useTimers = ({
     transitionPausedAtRef.current = 0;
     promptStartRef.current = Date.now();
     promptElapsedMsRef.current = 0;
+
+    if (!timerFrozenRef.current) {
+      tickRef.current?.();
+    }
   };
 
   // --- Pause / resume --------------------------------------------------------
 
   const pauseClocks = () => {
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       timerRef.current = null;
     }
 
@@ -257,7 +304,7 @@ export const useTimers = ({
 
   const resumeClocks = () => {
     if (tickRef.current && !timerRef.current) {
-      timerRef.current = setInterval(tickRef.current, 100);
+      scheduleNextTick(0);
     }
 
     if (transitionStartedAtRef.current > 0 && transitionPausedAtRef.current > 0) {
@@ -286,39 +333,42 @@ export const useTimers = ({
     promptElapsedMsRef.current = 0;
   };
 
-  // Manual task-box selection: restart the prompt clock and progress bar.
+  // Manual task-box selection: restart the prompt clock, per-task timer, and
+  // progress bar.
   const markPromptStart = () => {
     promptStartRef.current = Date.now();
     promptElapsedMsRef.current = 0;
+    setRecordingTime(0);
     setProgress(0);
   };
 
-  const getElapsedMs = () =>
-    startRef.current ? getAdjustedElapsedMs(Date.now(), startRef.current, pausedMsRef.current) : 0;
-
   // FREEZE-ON-STOP: synchronously snapshot the stop-moment clock values into
   // frozen refs BEFORE any state setters run. Never skip these writes.
+  // Returns the per-task elapsed ms (clamped to the task duration) so callers
+  // can pass it straight to freezeClocks.
   const snapshotStop = (currentIndex) => {
     const now = Date.now();
-    const finalElapsed = startRef.current ? getAdjustedElapsedMs(now, startRef.current, pausedMsRef.current) : 0;
-    frozenTimeRef.current = finalElapsed;
+    let finalElapsed = 0;
 
     const currentItem = initialPromptSequence[currentIndex];
     if (currentItem && promptStartRef.current) {
       const elapsedInPrompt = now - promptStartRef.current;
       const durationMs = currentItem.duration * 1000;
+      finalElapsed = Math.min(elapsedInPrompt, durationMs);
       frozenProgressRef.current = Math.min((elapsedInPrompt / durationMs) * 100, 100);
     }
+
+    frozenTimeRef.current = finalElapsed;
 
     return finalElapsed;
   };
 
-  // Freeze all clocks at the given elapsed value and stop every interval.
+  // Freeze all clocks at the given per-task elapsed value and stop every timer.
   const freezeClocks = (finalElapsed) => {
     timerFrozenRef.current = true;
     frozenTimeRef.current = finalElapsed;
     setFrozenTimerMs(finalElapsed);
-    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
     timerRef.current = null;
     tickRef.current = null;
     cancelCountdown();
@@ -329,7 +379,7 @@ export const useTimers = ({
   // Start Over starts clean (freeze-on-stop invariant: always clear all five
   // frozen refs here — frozenTimeRef/frozenProgressRef live in this hook).
   const resetTimers = () => {
-    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
     timerRef.current = null;
     tickRef.current = null;
     if (countdownRef.current) {
@@ -337,7 +387,7 @@ export const useTimers = ({
       countdownRef.current = null;
     }
     if (transitionCountdownRef.current) {
-      clearInterval(transitionCountdownRef.current);
+      clearTimeout(transitionCountdownRef.current);
       transitionCountdownRef.current = null;
     }
 
@@ -386,7 +436,6 @@ export const useTimers = ({
     resumeClocks,
     markSessionStart,
     markPromptStart,
-    getElapsedMs,
     snapshotStop,
     freezeClocks,
     resetTimers,

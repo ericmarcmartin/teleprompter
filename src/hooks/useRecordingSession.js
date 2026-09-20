@@ -10,7 +10,9 @@
 //        frozenActiveIndexRef  — which task box is highlighted
 //        frozenCompletedRef    — which task boxes are marked completed
 //        frozenProgressRef     — progress-bar width %   (owned by useTimers)
-//        frozenTimeRef         — prompt-timer elapsed ms (owned by useTimers)
+//        frozenTimeRef         — prompt-timer per-task elapsed ms (owned by
+//                                useTimers; the prompt-timer counts per task,
+//                                00:00:00.000 → task duration)
 //        frozenStatusRef       — status-pill text
 //      These refs are written BEFORE stopRequestedRef is set and BEFORE any
 //      React state setters are called, so they capture the true stop-moment
@@ -42,7 +44,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { initialPromptSequence } from '../data/prompts.js';
 import { mergeSavedRecordings } from '../recordings.js';
-import { TASK_TRANSITION_GAP_MS } from '../timing.js';
+import { TASK_TRANSITION_GAP_MS, getTaskWindowMs } from '../timing.js';
 import { formatTime } from '../utils/format.js';
 import { useRecorder } from './useRecorder.js';
 import { useTimers } from './useTimers.js';
@@ -206,16 +208,20 @@ export const useRecordingSession = ({ taskId, playback }) => {
 
   // Prompt-boundary reaction, invoked by the timer tick. Returns { final }
   // so the tick knows whether the session just ended.
-  const handleBoundary = ({ now, currentIndex, currentItem, promptStartMs }) => {
+  // Transcript timestamps come from getTaskWindowMs — canonical exact-second
+  // windows (Task 1: 0.000-2.000, Task 2: 2.000-4.000) with the inter-task
+  // gap excluded — not from wall-clock capture times.
+  const handleBoundary = ({ currentIndex, currentItem }) => {
     const nextIndex = currentIndex + 1;
     const nextPrompt = initialPromptSequence[nextIndex];
+    const window = getTaskWindowMs(initialPromptSequence, currentIndex);
     const entry = {
       promptIndex: currentIndex + 1,
       text: currentItem.text,
-      start: formatTime(promptStartMs - timers.startRef.current),
-      end: formatTime(now - timers.startRef.current),
-      startTs: promptStartMs - timers.startRef.current,
-      endTs: now - timers.startRef.current,
+      start: formatTime(window.startMs),
+      end: formatTime(window.endMs),
+      startTs: window.startMs,
+      endTs: window.endMs,
     };
 
     transcriptRef.current.push(entry);
@@ -250,8 +256,9 @@ export const useRecordingSession = ({ taskId, playback }) => {
       return { final: false };
     }
 
-    // Final prompt completed — freeze the clock and stop.
-    const finishedElapsed = timers.getElapsedMs();
+    // Final prompt completed — freeze the per-task clock at exactly the task
+    // duration (e.g. 00:00:02.000) and stop.
+    const finishedElapsed = currentItem.duration * 1000;
     recorder.stopRequestedRef.current = true;
     setIsStopped(true);
     setStatus('Recording finished.');
@@ -288,10 +295,12 @@ export const useRecordingSession = ({ taskId, playback }) => {
     setStatus('Recording in progress');
 
     try {
-      timers.markSessionStart();
-
-      // Start the first per-prompt recorder
+      // Recorder, session clock, and progress bar all start in this one
+      // synchronous block (beginTick fires its first tick immediately), so
+      // they are frame-aligned from the start.
       recorder.startRecorderForPrompt(1);
+
+      timers.markSessionStart();
 
       timers.beginTick({ onBoundary: handleBoundary });
       setStatus(`Task 1 of ${initialPromptSequence.length}`);
