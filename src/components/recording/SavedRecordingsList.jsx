@@ -1,7 +1,8 @@
 const SavedRecordingsList = ({ recordings, playingRecordingId, onPlayRecording }) => (
   <div className="saved-recordings">
     <div className="saved-recordings-header">Saved recordings — {recordings.length} task{recordings.length !== 1 ? 's' : ''}</div>
-    {recordings.map((recording) => {
+    <div className="saved-recordings-body">
+      {recordings.map((recording) => {
       const entry = recording.transcript?.[0];
       const duration = entry?.start && entry?.end
         ? `${entry.start} → ${entry.end}`
@@ -43,7 +44,8 @@ const SavedRecordingsList = ({ recordings, playingRecordingId, onPlayRecording }
           </div>
         </div>
       );
-    })}
+      })}
+    </div>
   </div>
 );
 

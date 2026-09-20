@@ -1226,6 +1226,14 @@ select:focus {
   margin-bottom: 10px;
 }
 
+/* Scrollable body: capped at exactly 5 item heights (5 × 54px item+gap) so
+   long sessions don't stretch the page — earlier takes scroll into view. */
+.saved-recordings-body {
+  max-height: 270px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 .saved-recording-item {
   display: flex;
   align-items: center;

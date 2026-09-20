@@ -188,7 +188,8 @@ export const useRecordingSession = ({ taskId, playback }) => {
         };
       });
 
-    setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings).slice(0, 100));
+    // Keep every merged take — no cap: sessions can have more than 100 tasks.
+    setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings));
     setStatus(`${newRecordings.length} task recording${newRecordings.length !== 1 ? 's' : ''} saved. Export when you are ready.`);
 
     recorder.stopStream();
@@ -276,9 +277,15 @@ export const useRecordingSession = ({ taskId, playback }) => {
   };
 
   const startActualRecording = async () => {
-    // Revoke previous preview URLs and stop any active playback
+    // Fresh runs start at task 1; after Re-record Task they resume at the
+    // stopped-at task (currentPromptIndexRef survives the re-record reset).
+    const startIndex = currentPromptIndexRef.current;
+    const startPromptNumber = startIndex + 1; // recordings/transcript are 1-based
+
+    // Revoke preview URLs only for takes this run will replace (a fresh run
+    // replaces everything), so earlier kept takes stay playable.
     for (const rec of savedRecordingsRef.current) {
-      if (rec.audioUrl) URL.revokeObjectURL(rec.audioUrl);
+      if (rec.audioUrl && rec.promptIndex >= startPromptNumber) URL.revokeObjectURL(rec.audioUrl);
     }
     if (playback?.previewAudioRef?.current) playback.previewAudioRef.current.pause();
     playback?.setIsPlayingPreview(false);
@@ -296,20 +303,20 @@ export const useRecordingSession = ({ taskId, playback }) => {
     recorder.perPromptRecordingsRef.current = [];
     recorder.recorderReadyRef.current = true;
     setIsRecording(true);
-    setTranscript([]);
-    transcriptRef.current = [];
+    // Transcript is NOT cleared here: fresh sessions already cleared it via
+    // resetRecordingState, and a re-record run keeps earlier tasks' entries.
     setStatus('Recording in progress');
 
     try {
       // Recorder, session clock, and progress bar all start in this one
       // synchronous block (beginTick fires its first tick immediately), so
       // they are frame-aligned from the start.
-      recorder.startRecorderForPrompt(1);
+      recorder.startRecorderForPrompt(startPromptNumber);
 
       timers.markSessionStart();
 
       timers.beginTick({ onBoundary: handleBoundary });
-      setStatus(`Task 1 of ${initialPromptSequence.length}`);
+      setStatus(`Task ${startPromptNumber} of ${initialPromptSequence.length}`);
     } catch (error) {
       console.error('Unable to start recording', error);
       setStatus('Recording could not start.');
@@ -423,10 +430,40 @@ export const useRecordingSession = ({ taskId, playback }) => {
     recorder.recorderReadyRef.current = true;
   };
 
+  // Re-record the task that was active when Stop was pressed: reset the
+  // clocks and frozen refs, then point the session back at that task so the
+  // next Record run re-records it and proceeds normally through the rest.
+  // Earlier tasks keep their completions, transcript entries, and saved
+  // takes; takes for tasks being re-recorded are discarded now and replaced
+  // at the next finalize.
   const handleReRecord = () => {
+    const resumeIndex = frozenActiveIndexRef.current;
+    const resumePromptNumber = resumeIndex + 1; // recordings/transcript are 1-based
+    const keptCompleted = completedPromptsRef.current.filter((index) => index < resumeIndex);
+    const keptTranscript = transcriptRef.current.filter((entry) => entry.promptIndex < resumePromptNumber);
+    const keptRecordings = [];
+    for (const rec of savedRecordingsRef.current) {
+      if (rec.promptIndex < resumePromptNumber) {
+        keptRecordings.push(rec);
+      } else if (rec.audioUrl) {
+        URL.revokeObjectURL(rec.audioUrl);
+      }
+    }
+
     resetRecordingState();
+
+    savedRecordingsRef.current = keptRecordings;
+    setSavedRecordings(keptRecordings);
+    setCurrentPromptIndex(resumeIndex);
+    currentPromptIndexRef.current = resumeIndex;
+    setActivePrompt(initialPromptSequence[resumeIndex]);
+    setCompletedPrompts(keptCompleted);
+    completedPromptsRef.current = keptCompleted;
+    transcriptRef.current = keptTranscript;
+    setTranscript([...keptTranscript]);
+
     setIsStopped(false);
-    setStatus('Microphone ready. Press Record to begin.');
+    setStatus(`Re-record Task ${resumePromptNumber}. Press Record to begin.`);
   };
 
   // Manual task-box selection (outside export mode): jump the session clock
