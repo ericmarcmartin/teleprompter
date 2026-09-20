@@ -618,7 +618,7 @@ select:focus {
 
 .recording-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 22px;
@@ -652,15 +652,23 @@ select:focus {
 
 /* Status pill — sky-blue info badge */
 .status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 6px 14px;
   border-radius: 999px;
-  padding: 9px 18px;
   background: rgba(14,165,233,0.08);
   color: #0369A1;
   border: 1px solid rgba(14,165,233,0.20);
   font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 0.88rem;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
+  align-self: flex-start;
+  line-height: 1.2;
 }
 
 /* ─── Teleprompter display ────────────────────────────────────────── */
