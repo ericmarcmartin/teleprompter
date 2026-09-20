@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { formatTime, toTranscriptFilename } from './format.js';
+
+test('formatTime formats zero', () => {
+  assert.equal(formatTime(0), '00:00:00.000');
+});
+
+test('formatTime pads hours, minutes, seconds, and milliseconds', () => {
+  assert.equal(formatTime(3661234), '01:01:01.234');
+  assert.equal(formatTime(60000), '00:01:00.000');
+  assert.equal(formatTime(5), '00:00:00.005');
+});
+
+test('toTranscriptFilename falls back to a default task id', () => {
+  assert.match(toTranscriptFilename('TASK-1001'), /^TASK-1001_.+_transcript\.txt$/);
+  assert.match(toTranscriptFilename(''), /^task_.+_transcript\.txt$/);
+});

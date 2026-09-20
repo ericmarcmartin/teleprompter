@@ -1,0 +1,30 @@
+// Formatting + download helpers. Pure / DOM-only — no React, no recording state.
+
+export const formatTime = (ms) => {
+  const hours = String(Math.floor(ms / 3600000)).padStart(2, '0');
+  const minutes = String(Math.floor((ms % 3600000) / 60000)).padStart(2, '0');
+  const seconds = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+  const milliseconds = String(ms % 1000).padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+};
+
+export const formatDateTime = (date = new Date()) =>
+  `${date.toISOString().slice(0, 10)} ${date.toLocaleTimeString('en-GB', {
+    hour12: false,
+  })}`;
+
+export const toTranscriptFilename = (taskId) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `${taskId || 'task'}_${timestamp}_transcript.txt`;
+};
+
+export const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+};
