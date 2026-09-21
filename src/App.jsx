@@ -92,6 +92,11 @@ function App() {
     window.history.pushState({}, '', '/recording-collection-software');
   };
 
+  // In-place reset — no page reload (the old window.location.replace caused a
+  // 404 on Vercel's static hosting). Tears down recorder/stream, clears all
+  // session state, and leaves the user on /recording-collection-software with
+  // the Record button ready. The next Record click re-requests the mic stream
+  // (browser remembers the grant, so no permission prompt).
   const handleStartOver = () => {
     playback.stopPlaybackAudio();
     if (playback.previewAudioRef.current) {
@@ -108,9 +113,9 @@ function App() {
     session.teardownRecorderAndStream();
     session.clearWaveform();
     session.resetRecordingState({ clearSavedRecordings: true });
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.replace('/recording-collection-software');
+    session.setStatus('Microphone ready. Press Record to begin.');
+    // Normalize the URL without navigating (no-op when already on this path).
+    window.history.replaceState({}, '', '/recording-collection-software');
   };
 
   return (
