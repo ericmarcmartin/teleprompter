@@ -45,10 +45,41 @@ import { useEffect, useRef, useState } from 'react';
 import { initialPromptSequence } from '../data/prompts.js';
 import { mergeSavedRecordings } from '../recordings.js';
 import { getTaskWindowMs } from '../timing.js';
+import { trimSilenceFromAudioBuffer } from '../utils/audioTrim.js';
 import { formatTime } from '../utils/format.js';
+import { audioBufferToWavBlob } from '../utils/wav.js';
 import { useRecorder } from './useRecorder.js';
 import { useTimers } from './useTimers.js';
 import { useWaveform } from './useWaveform.js';
+
+// Decodes a raw per-prompt blob, trims leading/trailing silence, and
+// re-encodes as WAV. On any decode failure, keeps the original blob so one
+// bad clip doesn't fail the whole export batch.
+const trimPerPromptRecording = async (rec, audioContext) => {
+  if (!audioContext) {
+    return { ...rec, trimStartMs: 0, trimmedDurationMs: null };
+  }
+
+  try {
+    const arrayBuffer = await rec.blob.arrayBuffer();
+    const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const { trimmedBuffer, onsetMs, durationMs } = trimSilenceFromAudioBuffer(decoded);
+    const wavBlob = audioBufferToWavBlob(trimmedBuffer);
+    return {
+      ...rec,
+      blob: wavBlob,
+      mimeType: 'audio/wav',
+      trimStartMs: onsetMs,
+      trimmedDurationMs: durationMs,
+      // Cached so session export can reuse the exact trimmed samples instead
+      // of re-decoding the WAV blob a second time.
+      audioBuffer: trimmedBuffer,
+    };
+  } catch (error) {
+    console.error('Unable to trim recording, keeping untrimmed audio', error);
+    return { ...rec, trimStartMs: 0, trimmedDurationMs: null };
+  }
+};
 
 // Orchestrates one recording session: composes the timer clock (useTimers),
 // the MediaRecorder lifecycle (useRecorder), and the waveform (useWaveform),
@@ -176,20 +207,34 @@ export const useRecordingSession = ({ taskId, playback }) => {
     recorder.stopRequestedRef.current = false;
     waveform.clearWaveform();
 
-    const newRecordings = recorder.perPromptRecordingsRef.current
-      .filter((rec) => rec && rec.blob)
-      .map((rec) => {
-        const audioUrl = URL.createObjectURL(rec.blob);
-        return {
-          id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
-          taskId,
-          promptIndex: rec.promptIndex,
-          transcript: rec.entry ? [rec.entry] : [],
-          blob: rec.blob,
-          audioUrl,
-          createdAt: new Date().toISOString(),
-        };
-      });
+    const rawRecordings = recorder.perPromptRecordingsRef.current.filter((rec) => rec && rec.blob);
+
+    const audioContextClass = window.AudioContext || window.webkitAudioContext;
+    let trimmedRecordings = rawRecordings;
+    if (audioContextClass) {
+      const audioContext = new audioContextClass();
+      try {
+        trimmedRecordings = await Promise.all(rawRecordings.map((rec) => trimPerPromptRecording(rec, audioContext)));
+      } finally {
+        audioContext.close().catch(() => undefined);
+      }
+    }
+
+    const newRecordings = trimmedRecordings.map((rec) => {
+      const audioUrl = URL.createObjectURL(rec.blob);
+      return {
+        id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
+        taskId,
+        promptIndex: rec.promptIndex,
+        transcript: rec.entry ? [rec.entry] : [],
+        blob: rec.blob,
+        audioUrl,
+        trimStartMs: rec.trimStartMs ?? 0,
+        trimmedDurationMs: rec.trimmedDurationMs ?? null,
+        audioBuffer: rec.audioBuffer ?? null,
+        createdAt: new Date().toISOString(),
+      };
+    });
 
     // Keep every merged take — no cap: sessions can have more than 100 tasks.
     setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings));

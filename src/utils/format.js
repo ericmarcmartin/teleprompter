@@ -8,6 +8,16 @@ export const formatTime = (ms) => {
   return `${hours}:${minutes}:${seconds}.${milliseconds}`;
 };
 
+// Export-timestamp format: minutes unpadded, seconds/millis padded (e.g. "0:02.259").
+export const formatDecimalTime = (ms) => {
+  const totalMs = Math.max(0, Math.round(ms));
+  const totalSeconds = Math.floor(totalMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const millis = totalMs % 1000;
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+};
+
 export const formatDateTime = (date = new Date()) =>
   `${date.toISOString().slice(0, 10)} ${date.toLocaleTimeString('en-GB', {
     hour12: false,

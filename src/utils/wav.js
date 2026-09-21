@@ -60,29 +60,33 @@ export const mergeAudioBuffersToWav = (audioBuffers) => {
     return null;
   }
 
-  const totalLength = audioBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
-  const channels = Math.max(...audioBuffers.map((buffer) => buffer.numberOfChannels));
+  const numberOfChannels = Math.max(...audioBuffers.map((buffer) => buffer.numberOfChannels));
   const sampleRate = audioBuffers[0].sampleRate;
-  const mergedBuffer = new AudioContext().createBuffer(channels, totalLength, sampleRate);
+  const totalLength = audioBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
 
-  for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
-    const mergedChannel = mergedBuffer.getChannelData(channelIndex);
-    let offset = 0;
+  // Plain Float32Array channels — NOT a real AudioContext-created AudioBuffer.
+  // Writing through AudioBuffer.getChannelData() and mutating in place isn't
+  // guaranteed to persist on every engine (notably WebKit/Safari can return a
+  // copy), which silently dropped the merged audio. Building the buffer by
+  // hand and feeding it straight to audioBufferToWavBlob (duck-typed) avoids
+  // that pitfall entirely and needs no AudioContext.
+  const channelData = Array.from({ length: numberOfChannels }, () => new Float32Array(totalLength));
 
-    for (const sourceBuffer of audioBuffers) {
-      const sourceChannelCount = sourceBuffer.numberOfChannels;
-      const sourceData = sourceBuffer.numberOfChannels > channelIndex
-        ? sourceBuffer.getChannelData(channelIndex)
-        : sourceBuffer.getChannelData(0);
-
-      mergedChannel.set(sourceData, offset);
-      offset += sourceData.length;
-
-      if (sourceChannelCount < channels && channelIndex >= sourceChannelCount) {
-        mergedChannel.fill(0, offset - sourceData.length, offset);
-      }
+  let offset = 0;
+  for (const buffer of audioBuffers) {
+    for (let channel = 0; channel < numberOfChannels; channel += 1) {
+      const sourceData = channel < buffer.numberOfChannels ? buffer.getChannelData(channel) : buffer.getChannelData(0);
+      channelData[channel].set(sourceData, offset);
     }
+    offset += buffer.length;
   }
+
+  const mergedBuffer = {
+    numberOfChannels,
+    sampleRate,
+    length: totalLength,
+    getChannelData: (channel) => channelData[channel],
+  };
 
   return audioBufferToWavBlob(mergedBuffer);
 };
