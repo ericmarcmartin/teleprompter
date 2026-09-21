@@ -60,6 +60,9 @@ export const useRecordingSession = ({ taskId, playback }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
+  // True from countdown-end until the recorder is actually running — bridges
+  // the async mic-permission gap so the UI never flashes the idle message.
+  const [isStarting, setIsStarting] = useState(false);
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [activePrompt, setActivePrompt] = useState(initialPromptSequence[0]);
   const [completedPrompts, setCompletedPrompts] = useState([]);
@@ -277,6 +280,11 @@ export const useRecordingSession = ({ taskId, playback }) => {
   };
 
   const startActualRecording = async () => {
+    // Bridge the countdown-end → recorder-running gap: the mic stream is
+    // released at every finalize, so the permission await below can take
+    // real time, during which countdown is 0 and isRecording is still false.
+    setIsStarting(true);
+
     // Fresh runs start at task 1; after Re-record Task they resume at the
     // stopped-at task (currentPromptIndexRef survives the re-record reset).
     const startIndex = currentPromptIndexRef.current;
@@ -292,7 +300,10 @@ export const useRecordingSession = ({ taskId, playback }) => {
 
     if (!recorder.streamRef.current) {
       const granted = await recorder.requestRecordingPermission();
-      if (!granted) return;
+      if (!granted) {
+        setIsStarting(false);
+        return;
+      }
     }
 
     if (recorder.streamRef.current) {
@@ -317,15 +328,17 @@ export const useRecordingSession = ({ taskId, playback }) => {
 
       timers.beginTick({ onBoundary: handleBoundary });
       setStatus(`Task ${startPromptNumber} of ${initialPromptSequence.length}`);
+      setIsStarting(false);
     } catch (error) {
       console.error('Unable to start recording', error);
       setStatus('Recording could not start.');
       setIsRecording(false);
+      setIsStarting(false);
     }
   };
 
   const startCountdownAndRecording = () => {
-    if (isRecording || timers.isCountdownActive()) return;
+    if (isRecording || isStarting || timers.isCountdownActive()) return;
 
     setIsStopped(false);
     setStatus('Recording starts in 3...');
@@ -492,6 +505,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     isRecording,
     isPaused,
     isStopped,
+    isStarting,
     currentPromptIndex,
     activePrompt,
     completedPrompts,

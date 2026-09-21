@@ -30,6 +30,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     isRecording,
     isPaused,
     isStopped,
+    isStarting,
     currentPromptIndex,
     activePrompt,
     completedPrompts,
@@ -99,6 +100,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
           transitionCountdownMs={transitionCountdownMs}
           isRecording={isRecording}
           isStopped={isStopped}
+          isStarting={isStarting}
           isSessionComplete={isSessionComplete}
           totalTasks={initialPromptSequence.length}
           totalDurationMs={TOTAL_DURATION_MS}
@@ -115,7 +117,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
         </div>
 
         <div className="controls">
-          {!isRecording && !countdown && !isStopped ? (
+          {!isRecording && !isStarting && !countdown && !isStopped ? (
             <button className="primary" onClick={startCountdownAndRecording}>Record</button>
           ) : null}
           {isStopped && (

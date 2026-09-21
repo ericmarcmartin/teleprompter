@@ -75,6 +75,7 @@ const TeleprompterDisplay = ({
   transitionCountdownMs,
   isRecording,
   isStopped,
+  isStarting,
   isSessionComplete,
   totalTasks,
   totalDurationMs,
@@ -88,10 +89,12 @@ const TeleprompterDisplay = ({
       <TransitionBuffer transitionCountdownMs={transitionCountdownMs} />
     ) : isSessionComplete ? (
       <SessionComplete totalTasks={totalTasks} totalDurationMs={totalDurationMs} />
-    ) : isRecording || isStopped || countdown > 0 ? (
+    ) : isRecording || isStopped || isStarting || countdown > 0 ? (
       <>
         <div className="prompt-index">Task {currentPromptIndex + 1}</div>
-        <div className="prompt-text">{promptText}</div>
+        {/* Prompt text stays hidden during the 3-2-1 countdown — it is only
+            revealed once recording actually starts (countdown hits 0). */}
+        {countdown === 0 && <div className="prompt-text">{promptText}</div>}
         <div className="prompt-timer">
           {countdown > 0 ? `Starts in ${countdown}` : formatTime(timerMs)}
         </div>
