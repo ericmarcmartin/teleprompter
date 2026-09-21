@@ -37,6 +37,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     savedRecordings,
     isSessionComplete,
     countdown,
+    countdownSettling,
     transitionCountdownMs,
     recordingTime,
     frozenTimerMs,
@@ -105,6 +106,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
           totalTasks={initialPromptSequence.length}
           totalDurationMs={TOTAL_DURATION_MS}
           countdown={countdown}
+          countdownSettling={countdownSettling}
           currentPromptIndex={currentPromptIndex}
           promptText={activePrompt.text}
           timerMs={isStopped ? frozenTimerMs : recordingTime}

@@ -10,7 +10,10 @@
 //                                 one synchronous tick from beginTick and
 //                                 completeTransition so recorder, clock, and
 //                                 progress bar start in the same frame
-//   - 3-2-1 pre-record countdown — countdownRef (setInterval)
+//   - 3-2-1 pre-record countdown — countdownRef (setInterval) plus a 0.5s
+//                                 settling timeout after the visible 3-2-1
+//                                 so recording starts half a second late
+//                                 (never shown — the countdown fades out)
 //   - Inter-task transition (2s) — transitionCountdownRef (setTimeout chain,
 //                                 completes at exactly gapMs)
 //   - Timing refs: startRef, promptStartRef, promptElapsedMsRef, pausedMsRef,
@@ -51,10 +54,14 @@ export const useTimers = ({
   const [frozenTimerMs, setFrozenTimerMs] = useState(0); // per-task, frozen at stop
   const [progress, setProgress] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  // True during the hidden 1s tail after the visible 3-2-1 ends — the display
+  // fades the countdown block out instead of freezing on "1".
+  const [countdownSettling, setCountdownSettling] = useState(false);
   const [transitionCountdownMs, setTransitionCountdownMs] = useState(0);
 
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
+  const countdownSettleRef = useRef(null);
   const transitionCountdownRef = useRef(null);
   const tickRef = useRef(null);
   const startRef = useRef(0);
@@ -90,14 +97,22 @@ export const useTimers = ({
     // (which starts the recording) must fire exactly once. A double start
     // orphans a tick interval that later wakes up after Re-record resets the
     // freeze flags and drives phantom boundary crossings.
+    // 3 visible ticks (3-2-1), then a hidden 0.5s settling beat before
+    // recording starts. During the beat the settling flag is set so the UI
+    // fades the countdown block out rather than freezing on "1".
     let remaining = 3;
     countdownRef.current = setInterval(() => {
       remaining -= 1;
       if (remaining <= 0) {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
-        setCountdown(0);
-        onComplete();
+        setCountdownSettling(true); // enter hidden settling beat
+        countdownSettleRef.current = setTimeout(() => {
+          countdownSettleRef.current = null;
+          setCountdown(0);
+          setCountdownSettling(false);
+          onComplete();
+        }, 500);
         return;
       }
       setCountdown(remaining);
@@ -111,7 +126,12 @@ export const useTimers = ({
       clearInterval(countdownRef.current);
       countdownRef.current = null;
     }
+    if (countdownSettleRef.current) {
+      clearTimeout(countdownSettleRef.current);
+      countdownSettleRef.current = null;
+    }
     setCountdown(0);
+    setCountdownSettling(false);
   };
 
   // --- Recording tick (self-rescheduling setTimeout chain) -------------------
@@ -385,6 +405,10 @@ export const useTimers = ({
       clearInterval(countdownRef.current);
       countdownRef.current = null;
     }
+    if (countdownSettleRef.current) {
+      clearTimeout(countdownSettleRef.current);
+      countdownSettleRef.current = null;
+    }
     if (transitionCountdownRef.current) {
       clearTimeout(transitionCountdownRef.current);
       transitionCountdownRef.current = null;
@@ -407,6 +431,7 @@ export const useTimers = ({
     setFrozenTimerMs(0);
     setProgress(0);
     setCountdown(0);
+    setCountdownSettling(false);
     setTransitionCountdownMs(0);
   };
 
@@ -416,6 +441,7 @@ export const useTimers = ({
     frozenTimerMs,
     progress,
     countdown,
+    countdownSettling,
     transitionCountdownMs,
     // refs needed by session code
     startRef,

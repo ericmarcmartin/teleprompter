@@ -343,7 +343,9 @@ export const useRecordingSession = ({ taskId, playback }) => {
     setIsStopped(false);
     setStatus('Recording starts in 3...');
 
-    // Play countdown audio — the file is 3 s (3-2-1-go), starts immediately
+    // Play countdown audio — the file is 3 s (3-2-1-go), starts immediately.
+    // Recording itself starts 0.5 s after the visible countdown ends (hidden
+    // settling beat inside beginCountdown), i.e. just after the "go".
     if (countdownAudioRef.current) {
       countdownAudioRef.current.currentTime = 0;
       countdownAudioRef.current.play().catch(() => undefined);
@@ -514,6 +516,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     isAudioSupported,
     isSessionComplete,
     countdown: timers.countdown,
+    countdownSettling: timers.countdownSettling,
     transitionCountdownMs: timers.transitionCountdownMs,
     recordingTime: timers.recordingTime,
     frozenTimerMs: timers.frozenTimerMs,

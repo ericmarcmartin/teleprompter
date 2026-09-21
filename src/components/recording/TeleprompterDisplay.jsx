@@ -80,6 +80,7 @@ const TeleprompterDisplay = ({
   totalTasks,
   totalDurationMs,
   countdown,
+  countdownSettling,
   currentPromptIndex,
   promptText,
   timerMs,
@@ -90,7 +91,9 @@ const TeleprompterDisplay = ({
     ) : isSessionComplete ? (
       <SessionComplete totalTasks={totalTasks} totalDurationMs={totalDurationMs} />
     ) : isRecording || isStopped || isStarting || countdown > 0 ? (
-      <>
+      // During the hidden settling second (countdownSettling) the countdown
+      // block fades out, leaving a calm beat before the prompt appears.
+      <div className={`teleprompter-stage${countdownSettling ? ' is-settling' : ''}`}>
         <div className="prompt-index">Task {currentPromptIndex + 1}</div>
         {/* Prompt text stays hidden during the 3-2-1 countdown — it is only
             revealed once recording actually starts (countdown hits 0). */}
@@ -98,7 +101,7 @@ const TeleprompterDisplay = ({
         <div className="prompt-timer">
           {countdown > 0 ? `Starts in ${countdown}` : formatTime(timerMs)}
         </div>
-      </>
+      </div>
     ) : (
       <div className="prompt-text prompt-text--idle">Select a task below and press record to begin.</div>
     )}

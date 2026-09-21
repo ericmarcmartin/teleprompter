@@ -700,6 +700,21 @@ select:focus {
   margin-bottom: 18px;
 }
 
+/* Stage wrapper: fades out during the hidden settling second between the
+   visible countdown and recording start. */
+.teleprompter-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.teleprompter-stage.is-settling {
+  opacity: 0;
+}
+
 .prompt-text {
   font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.8rem);
