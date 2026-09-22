@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildTimestampCsv, buildTimestampRows } from './exports.js';
+import { buildTimestampCsv, buildTimestampRows, getSessionAudioSource } from './exports.js';
+
+test('session export prefers raw audio while legacy records use existing audio', () => {
+  const rawBlob = { name: 'raw' };
+  const trimmedBlob = { name: 'trimmed' };
+  const trimmedBuffer = { name: 'trimmed-buffer' };
+
+  assert.equal(getSessionAudioSource({
+    untrimmedBlob: rawBlob,
+    blob: trimmedBlob,
+    audioBuffer: trimmedBuffer,
+  }), rawBlob);
+  assert.equal(getSessionAudioSource({ blob: trimmedBlob, audioBuffer: trimmedBuffer }), trimmedBuffer);
+  assert.equal(getSessionAudioSource({ blob: trimmedBlob }), trimmedBlob);
+});
 
 test('buildTimestampRows chains Start/Duration contiguously from trimmed values', () => {
   const recordings = [

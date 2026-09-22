@@ -10,12 +10,8 @@ export const mergeSavedRecordings = (previous = [], incoming = []) => {
   return [...merged.values()].sort((a, b) => (a.promptIndex ?? 0) - (b.promptIndex ?? 0));
 };
 
-export const shouldKeepRecordingChunk = ({ stopRequested, promptIndex, totalPrompts }) => {
-  if (promptIndex == null || totalPrompts == null) return true;
+export const shouldKeepRecordingChunk = ({ promptIndex }) => {
+  if (promptIndex == null) return true;
 
-  if (promptIndex >= totalPrompts) {
-    return true;
-  }
-
-  return !stopRequested;
+  return promptIndex >= 0;
 };

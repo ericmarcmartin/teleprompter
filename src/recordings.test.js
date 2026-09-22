@@ -37,8 +37,11 @@ test('stops mid-task without creating a partial saved recording', () => {
   assert.equal(merged[2].id, 'partial');
 });
 
+test('keeps a non-empty partial prompt when recording is stopped manually', () => {
+  assert.equal(shouldKeepRecordingChunk({ stopRequested: true, promptIndex: 9, totalPrompts: 200 }), true);
+});
+
 test('keeps the final prompt audio when the recording is being stopped at the end', () => {
   assert.equal(shouldKeepRecordingChunk({ stopRequested: true, promptIndex: 10, totalPrompts: 10 }), true);
-  assert.equal(shouldKeepRecordingChunk({ stopRequested: true, promptIndex: 9, totalPrompts: 10 }), false);
   assert.equal(shouldKeepRecordingChunk({ stopRequested: false, promptIndex: 10, totalPrompts: 10 }), true);
 });

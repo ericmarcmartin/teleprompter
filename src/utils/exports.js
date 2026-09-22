@@ -2,6 +2,8 @@
 // and return a status message string; callers own setting status in the UI.
 
 import { initialPromptSequence } from '../data/prompts.js';
+import JSZip from 'jszip';
+
 import { downloadBlob, formatDecimalTime } from './format.js';
 import { convertBlobToWav, mergeAudioBuffersToWav } from './wav.js';
 
@@ -46,13 +48,38 @@ export const buildTimestampCsv = (recordings) => {
   return [TIMESTAMP_CSV_HEADER, ...rows.map(rowToCsvLine)].join('\n');
 };
 
+const createTimestampBlob = (recordings) => new Blob([buildTimestampCsv(recordings)], {
+  type: 'text/csv;charset=utf-8',
+});
+
+const createIndividualWavFiles = async (recordings, taskId) => {
+  const validRecordings = recordings.filter((rec) => rec.blob);
+  const files = [];
+
+  for (const rec of validRecordings) {
+    const wavBlob = rec.blob.type === 'audio/wav' ? rec.blob : await convertBlobToWav(rec.blob);
+    if (!wavBlob) continue;
+
+    const effectiveTaskId = rec.taskId || taskId;
+    files.push({
+      filename: `task${rec.promptIndex}_${effectiveTaskId}.wav`,
+      blob: wavBlob,
+    });
+  }
+
+  return files;
+};
+
+export const getSessionAudioSource = (recording) =>
+  recording.untrimmedBlob || recording.audioBuffer || recording.blob;
+
 export const exportTimestampFile = (recordings, taskId) => {
   if (recordings.length === 0) {
     return 'No recordings available for timestamp export.';
   }
 
   const csv = buildTimestampCsv(recordings);
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const blob = createTimestampBlob(recordings);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   downloadBlob(blob, `${taskId || 'task'}_${timestamp}_timestamps.csv`);
   return 'Timestamp CSV exported.';
@@ -63,22 +90,49 @@ export const exportIndividualRecordingFiles = async (recordings, taskId) => {
     return 'No recordings available for individual export.';
   }
 
-  const validRecordings = recordings.filter((rec) => rec.blob);
-  if (validRecordings.length === 0) {
+  const files = await createIndividualWavFiles(recordings, taskId);
+  if (files.length === 0) {
     return 'No valid recordings available for export.';
   }
 
-  for (const rec of validRecordings) {
-    const wavBlob = rec.blob.type === 'audio/wav' ? rec.blob : await convertBlobToWav(rec.blob);
-    if (!wavBlob) continue;
-
-    const effectiveTaskId = rec.taskId || taskId;
-    const label = `task${rec.promptIndex}_${effectiveTaskId}`;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob(wavBlob, `${label}_${timestamp}.wav`);
+  const zip = new JSZip();
+  for (const file of files) {
+    zip.file(file.filename, file.blob);
   }
 
-  return `Exported ${validRecordings.length} individual recordings as WAV.`;
+  const archive = await zip.generateAsync({ type: 'blob' });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_individual_recordings.zip`);
+  return `Exported ${files.length} individual recordings in a ZIP.`;
+};
+
+const createSessionAudioBlob = async (recordings) => {
+  const validRecordings = recordings.filter((rec) => getSessionAudioSource(rec));
+  if (validRecordings.length === 0) return null;
+
+  const sortedRecordings = [...validRecordings].sort((a, b) => (a.promptIndex ?? 0) - (b.promptIndex ?? 0));
+  const needsDecode = sortedRecordings.some((rec) => getSessionAudioSource(rec) instanceof Blob);
+  let context = null;
+
+  if (needsDecode) {
+    const audioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!audioContextClass) return null;
+    context = new audioContextClass();
+  }
+
+  try {
+    const buffers = await Promise.all(sortedRecordings.map(async (recording) => {
+      const source = getSessionAudioSource(recording);
+      if (!(source instanceof Blob)) return source;
+      const sourceBlob = source;
+      const arrayBuffer = await sourceBlob.arrayBuffer();
+      return context.decodeAudioData(arrayBuffer.slice(0));
+    }));
+
+    return mergeAudioBuffersToWav(buffers);
+  } finally {
+    if (context) context.close().catch(() => undefined);
+  }
 };
 
 export const exportSessionAudioFile = async (recordings, taskId) => {
@@ -86,46 +140,18 @@ export const exportSessionAudioFile = async (recordings, taskId) => {
     return 'No recordings available for session export.';
   }
 
-  const validRecordings = recordings.filter((rec) => rec.blob || rec.audioBuffer);
-  if (validRecordings.length === 0) {
+  const wavBlob = await createSessionAudioBlob(recordings);
+  if (!wavBlob) {
     return 'No valid audio blobs available for session export.';
   }
 
-  const sortedRecordings = [...validRecordings].sort((a, b) => (a.promptIndex ?? 0) - (b.promptIndex ?? 0));
-  // Reuse each recording's already-trimmed buffer (the same one backing its
-  // Saved Recordings preview) instead of re-decoding the WAV blob, so the
-  // session export always matches what plays back in the saved list.
-  const needsDecode = sortedRecordings.some((rec) => !rec.audioBuffer);
-
-  let context = null;
-  if (needsDecode) {
-    const audioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!audioContextClass) {
-      return 'This browser cannot render session audio exports.';
-    }
-    context = new audioContextClass();
-  }
-
   try {
-    const buffers = await Promise.all(sortedRecordings.map(async (recording) => {
-      if (recording.audioBuffer) return recording.audioBuffer;
-      const arrayBuffer = await recording.blob.arrayBuffer();
-      return context.decodeAudioData(arrayBuffer.slice(0));
-    }));
-
-    const wavBlob = mergeAudioBuffersToWav(buffers);
-    if (!wavBlob) {
-      return 'Unable to create the session audio file.';
-    }
-
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     downloadBlob(wavBlob, `${taskId || 'task'}_${timestamp}_session.wav`);
     return 'Session audio exported as a single file.';
   } catch (error) {
     console.error('Unable to merge session recording', error);
     return 'Session export failed. Try exporting individual files instead.';
-  } finally {
-    if (context) context.close().catch(() => undefined);
   }
 };
 
@@ -134,10 +160,25 @@ export const exportAllFiles = async (recordings, taskId) => {
     return 'No recordings available for full export.';
   }
 
-  exportTimestampFile(recordings, taskId);
-  await exportIndividualRecordingFiles(recordings, taskId);
-  await exportSessionAudioFile(recordings, taskId);
-  return `All exports generated for ${taskId}.`;
+  const timestampBlob = createTimestampBlob(recordings);
+  const individualFiles = await createIndividualWavFiles(recordings, taskId);
+  const sessionBlob = await createSessionAudioBlob(recordings);
+
+  if (individualFiles.length === 0 || !sessionBlob) {
+    return 'Unable to create the full export ZIP.';
+  }
+
+  const zip = new JSZip();
+  zip.file(`${taskId || 'task'}_timestamps.csv`, timestampBlob);
+  for (const file of individualFiles) {
+    zip.file(file.filename, file.blob);
+  }
+  zip.file(`${taskId || 'task'}_session.wav`, sessionBlob);
+
+  const archive = await zip.generateAsync({ type: 'blob' });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_export.zip`);
+  return `Full export ZIP generated for ${taskId}.`;
 };
 
 // Downloads per-prompt audio + timestamp CSV files for the selected task (or all).

@@ -57,7 +57,7 @@ import { useWaveform } from './useWaveform.js';
 // bad clip doesn't fail the whole export batch.
 const trimPerPromptRecording = async (rec, audioContext) => {
   if (!audioContext) {
-    return { ...rec, trimStartMs: 0, trimmedDurationMs: null };
+    return { ...rec, untrimmedBlob: rec.blob, trimStartMs: 0, trimmedDurationMs: null };
   }
 
   try {
@@ -67,6 +67,7 @@ const trimPerPromptRecording = async (rec, audioContext) => {
     const wavBlob = audioBufferToWavBlob(trimmedBuffer);
     return {
       ...rec,
+      untrimmedBlob: rec.blob,
       blob: wavBlob,
       mimeType: 'audio/wav',
       trimStartMs: onsetMs,
@@ -77,7 +78,7 @@ const trimPerPromptRecording = async (rec, audioContext) => {
     };
   } catch (error) {
     console.error('Unable to trim recording, keeping untrimmed audio', error);
-    return { ...rec, trimStartMs: 0, trimmedDurationMs: null };
+    return { ...rec, untrimmedBlob: rec.blob, trimStartMs: 0, trimmedDurationMs: null };
   }
 };
 
@@ -192,8 +193,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
   };
 
   // Called when the final recorder stops (after Stop button or last prompt).
-  // Only finalized prompt recordings are saved. If Stop is pressed mid-task,
-  // we keep the recorded prompts already completed and discard the current partial.
+  // Non-empty recordings are saved, including the active prompt on manual stop.
   const finalizeRecordingExport = async () => {
     if (exportInProgressRef.current) {
       return;
@@ -228,6 +228,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
         promptIndex: rec.promptIndex,
         transcript: rec.entry ? [rec.entry] : [],
         blob: rec.blob,
+        untrimmedBlob: rec.untrimmedBlob ?? rec.blob,
         audioUrl,
         trimStartMs: rec.trimStartMs ?? 0,
         trimmedDurationMs: rec.trimmedDurationMs ?? null,
@@ -406,6 +407,20 @@ export const useRecordingSession = ({ taskId, playback }) => {
     frozenCompletedRef.current = [...completedPromptsRef.current];
     frozenActiveIndexRef.current = currentIndex;
     frozenStatusRef.current = currentIndex >= initialPromptSequence.length - 1 ? 'Recording finished.' : status;
+
+    if (!transcriptRef.current.some((entry) => entry.promptIndex === currentIndex + 1)) {
+      const window = getTaskWindowMs(initialPromptSequence, currentIndex);
+      const endMs = window.startMs + finalElapsed;
+      const currentPrompt = initialPromptSequence[currentIndex];
+      transcriptRef.current.push({
+        promptIndex: currentIndex + 1,
+        text: currentPrompt.text,
+        start: formatTime(window.startMs),
+        end: formatTime(endMs),
+        startTs: window.startMs,
+        endTs: endMs,
+      });
+    }
 
     recorder.stopRequestedRef.current = true;
     timers.freezeClocks(finalElapsed);
