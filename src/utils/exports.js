@@ -71,7 +71,7 @@ const createIndividualWavFiles = async (recordings, taskId) => {
 };
 
 export const getSessionAudioSource = (recording) =>
-  recording.untrimmedBlob || recording.audioBuffer || recording.blob;
+  recording.audioBuffer || recording.blob || recording.untrimmedBlob;
 
 export const exportTimestampFile = (recordings, taskId) => {
   if (recordings.length === 0) {

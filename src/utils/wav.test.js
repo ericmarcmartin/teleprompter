@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { audioBufferToWavBlob, mergeAudioBuffersToWav } from './wav.js';
 
-const makeFakeBuffer = (samples, sampleRate = 8000) => ({
+const makeFakeBuffer = (samples, sampleRate = 24000) => ({
   numberOfChannels: 1,
   sampleRate,
   length: samples.length,
@@ -22,6 +22,11 @@ const readPcmSamples = async (blob) => {
   return samples;
 };
 
+const readSampleRate = async (blob) => {
+  const buffer = await blob.arrayBuffer();
+  return new DataView(buffer).getUint32(24, true);
+};
+
 test('audioBufferToWavBlob round-trips PCM samples', async () => {
   const buffer = makeFakeBuffer([0, 0.5, -0.5, 1, -1]);
   const blob = audioBufferToWavBlob(buffer);
@@ -30,6 +35,20 @@ test('audioBufferToWavBlob round-trips PCM samples', async () => {
   assert.equal(samples.length, 5);
   assert.ok(Math.abs(samples[1] - 0.5) < 0.001);
   assert.ok(Math.abs(samples[2] + 0.5) < 0.001);
+});
+
+test('audioBufferToWavBlob normalizes high-rate input to 24 kHz', async () => {
+  const blob = audioBufferToWavBlob(makeFakeBuffer(new Array(48000).fill(0.25), 48000));
+
+  assert.equal(await readSampleRate(blob), 24000);
+  assert.equal((await blob.arrayBuffer()).byteLength, 44 + 24000 * 2);
+});
+
+test('audioBufferToWavBlob upsamples lower-rate input to 24 kHz', async () => {
+  const blob = audioBufferToWavBlob(makeFakeBuffer(new Array(8000).fill(0.25), 8000));
+
+  assert.equal(await readSampleRate(blob), 24000);
+  assert.equal((await blob.arrayBuffer()).byteLength, 44 + 24000 * 2);
 });
 
 test('mergeAudioBuffersToWav concatenates buffers back-to-back with no data loss', async () => {
@@ -49,4 +68,14 @@ test('mergeAudioBuffersToWav concatenates buffers back-to-back with no data loss
 
 test('mergeAudioBuffersToWav returns null for an empty list', () => {
   assert.equal(mergeAudioBuffersToWav([]), null);
+});
+
+test('mergeAudioBuffersToWav normalizes mixed input rates', async () => {
+  const first = makeFakeBuffer(new Array(8000).fill(0.25), 8000);
+  const second = makeFakeBuffer(new Array(48000).fill(0.75), 48000);
+  const merged = mergeAudioBuffersToWav([first, second]);
+  const wavBuffer = await merged.arrayBuffer();
+
+  assert.equal(await readSampleRate(merged), 24000);
+  assert.equal(wavBuffer.byteLength, 44 + 48000 * 2);
 });

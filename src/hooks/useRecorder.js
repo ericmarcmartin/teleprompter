@@ -78,7 +78,12 @@ export const useRecorder = ({
     if (!isAudioSupported) return false;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: { ideal: 24000 },
+          channelCount: 1,
+        },
+      });
       streamRef.current = stream;
       if (onStreamReady) onStreamReady(stream);
       setStatus('Microphone permission granted. Press Record to begin.');

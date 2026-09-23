@@ -1,9 +1,12 @@
 // WAV encoding helpers — decode recorded blobs and re-encode as 16-bit PCM WAV.
 
+import { resampleAudioBuffer } from './resample.js';
+
 export const audioBufferToWavBlob = (audioBuffer) => {
-  const channels = audioBuffer.numberOfChannels;
-  const sampleRate = audioBuffer.sampleRate;
-  const length = audioBuffer.length;
+  const normalizedBuffer = resampleAudioBuffer(audioBuffer);
+  const channels = normalizedBuffer.numberOfChannels;
+  const sampleRate = normalizedBuffer.sampleRate;
+  const length = normalizedBuffer.length;
   const wavBuffer = new ArrayBuffer(44 + length * channels * 2);
   const view = new DataView(wavBuffer);
 
@@ -30,7 +33,7 @@ export const audioBufferToWavBlob = (audioBuffer) => {
   let offset = 44;
   for (let i = 0; i < length; i += 1) {
     for (let channel = 0; channel < channels; channel += 1) {
-      const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[i] || 0));
+      const sample = Math.max(-1, Math.min(1, normalizedBuffer.getChannelData(channel)[i] || 0));
       view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
       offset += 2;
     }
@@ -60,9 +63,10 @@ export const mergeAudioBuffersToWav = (audioBuffers) => {
     return null;
   }
 
-  const numberOfChannels = Math.max(...audioBuffers.map((buffer) => buffer.numberOfChannels));
-  const sampleRate = audioBuffers[0].sampleRate;
-  const totalLength = audioBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
+  const normalizedBuffers = audioBuffers.map((buffer) => resampleAudioBuffer(buffer));
+  const numberOfChannels = Math.max(...normalizedBuffers.map((buffer) => buffer.numberOfChannels));
+  const sampleRate = normalizedBuffers[0].sampleRate;
+  const totalLength = normalizedBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
 
   // Plain Float32Array channels — NOT a real AudioContext-created AudioBuffer.
   // Writing through AudioBuffer.getChannelData() and mutating in place isn't
@@ -73,7 +77,7 @@ export const mergeAudioBuffersToWav = (audioBuffers) => {
   const channelData = Array.from({ length: numberOfChannels }, () => new Float32Array(totalLength));
 
   let offset = 0;
-  for (const buffer of audioBuffers) {
+  for (const buffer of normalizedBuffers) {
     for (let channel = 0; channel < numberOfChannels; channel += 1) {
       const sourceData = channel < buffer.numberOfChannels ? buffer.getChannelData(channel) : buffer.getChannelData(0);
       channelData[channel].set(sourceData, offset);

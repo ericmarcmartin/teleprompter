@@ -144,7 +144,7 @@ export const useTimers = ({
   // crossings land exactly on the prompt's exact-second end (e.g. 2.000s)
   // instead of drifting by up to one 100ms interval.
 
-  const scheduleNextTick = (delayMs) => {
+  const scheduleNextTick = (delayMs) => {x
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       tickRef.current?.();

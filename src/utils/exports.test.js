@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildTimestampCsv, buildTimestampRows, getSessionAudioSource } from './exports.js';
 
-test('session export prefers raw audio while legacy records use existing audio', () => {
+test('session export prefers trimmed audio and falls back for legacy records', () => {
   const rawBlob = { name: 'raw' };
   const trimmedBlob = { name: 'trimmed' };
   const trimmedBuffer = { name: 'trimmed-buffer' };
@@ -12,7 +12,7 @@ test('session export prefers raw audio while legacy records use existing audio',
     untrimmedBlob: rawBlob,
     blob: trimmedBlob,
     audioBuffer: trimmedBuffer,
-  }), rawBlob);
+  }), trimmedBuffer);
   assert.equal(getSessionAudioSource({ blob: trimmedBlob, audioBuffer: trimmedBuffer }), trimmedBuffer);
   assert.equal(getSessionAudioSource({ blob: trimmedBlob }), trimmedBlob);
 });
