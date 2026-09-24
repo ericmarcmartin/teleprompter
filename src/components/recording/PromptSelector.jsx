@@ -1,5 +1,7 @@
 // Task selector boxes. activeIndex and completedPrompts must already be the
 // frozen values when the session is stopped (freeze-on-stop invariant).
+import { getPromptBoxClassName, getPromptBoxState } from './promptSelectorLogic.js';
+
 const PromptSelector = ({
   prompts,
   isExportMode,
@@ -10,15 +12,18 @@ const PromptSelector = ({
 }) => (
   <div className={`prompt-selector ${isExportMode ? 'export-mode' : ''}`} aria-label="Task selector">
     {prompts.map((prompt, index) => {
-      const isActive = index === activeIndex;
-      const isCompleted = completedPrompts.includes(index);
-      const isExportSelected = isExportMode && downloadPromptIndex !== 'all' && Number(downloadPromptIndex) === index;
-      const isAllSelected = isExportMode && downloadPromptIndex === 'all' && index === 0;
+      const state = getPromptBoxState({
+        index,
+        activeIndex,
+        completedPrompts,
+        isExportMode,
+        downloadPromptIndex,
+      });
       return (
         <button
           key={`prompt-box-${prompt}-${index}`}
           type="button"
-          className={`prompt-box ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''} ${isExportSelected || isAllSelected ? 'export-selected' : ''}`}
+          className={getPromptBoxClassName(state)}
           onClick={() => onSelect(index)}
         >
           <span>Task {index + 1}</span>

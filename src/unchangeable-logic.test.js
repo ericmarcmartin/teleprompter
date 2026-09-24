@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 
 import { initialPromptSequence } from './data/prompts.js';
+import { getPromptBoxState } from './components/recording/promptSelectorLogic.js';
 import { resetAppForStartOver } from './startOver.js';
 import {
   buildTimestampCsv,
@@ -160,6 +161,22 @@ test('200 recorded prompts produce 200 individual files', async () => {
 
   assert.equal(recordings.length, 200);
   assert.equal(individualFiles.length, 200);
+});
+
+test('200 completed prompts mark every prompt box, including Tasks 180-200', () => {
+  const completedPrompts = Array.from({ length: initialPromptSequence.length }, (_, index) => index);
+  const states = initialPromptSequence.map((_, index) => getPromptBoxState({
+    index,
+    activeIndex: 0,
+    completedPrompts,
+    isExportMode: false,
+    downloadPromptIndex: 'all',
+  }));
+
+  assert.equal(states.length, 200);
+  assert.ok(states.every((state) => state.isCompleted));
+  assert.equal(states[179].isCompleted, true);
+  assert.equal(states[199].isCompleted, true);
 });
 
 test('Start Over clears playback, recording state, navigation, waveform, and URL', () => {
