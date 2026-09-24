@@ -26,18 +26,29 @@ import {
 } from './utils/exports.js';
 import { audioBufferToWavBlob } from './utils/wav.js';
 
-const makeAudioBuffer = (sampleRate = 24000, sample = 0.25) => ({
+const makeAudioBuffer = (sampleRate = 48000, sample = 0.25) => ({
   numberOfChannels: 1,
   sampleRate,
   length: 4,
   getChannelData: () => Float32Array.from([sample, sample, sample, sample]),
 });
 
-const makeWavBlob = (sampleRate = 24000) => audioBufferToWavBlob(makeAudioBuffer(sampleRate));
+const makeWavBlob = (sampleRate = 48000) => audioBufferToWavBlob(makeAudioBuffer(sampleRate));
 
 const readWavSampleRate = async (blob) => {
   const buffer = await blob.arrayBuffer();
   return new DataView(buffer).getUint32(24, true);
+};
+
+const readWavFormat = async (blob) => {
+  const buffer = await blob.arrayBuffer();
+  const view = new DataView(buffer);
+  return {
+    audioFormat: view.getUint16(20, true),
+    channels: view.getUint16(22, true),
+    sampleRate: view.getUint32(24, true),
+    bitsPerSample: view.getUint16(34, true),
+  };
 };
 
 const downloads = [];
@@ -131,7 +142,7 @@ test('individual export is trimmed, including individual files inside All', asyn
   assert.notEqual(getIndividualAudioSource(recordings[0]), recordings[0].untrimmedBlob);
   const individualFiles = await createIndividualWavFiles(recordings, 'TASK-1001');
   assert.equal(individualFiles.length, recordings.length);
-  assert.equal(await readWavSampleRate(individualFiles[0].blob), 24000);
+  assert.equal(await readWavSampleRate(individualFiles[0].blob), 48000);
 
   installDownloadCapture();
   await exportIndividualRecordingFiles(recordings, 'TASK-1001');
@@ -143,7 +154,7 @@ test('individual export is trimmed, including individual files inside All', asyn
   };
   await exportAllFiles(recordings, 'TASK-1001');
   const archive = await JSZip.loadAsync(downloads[1].blob);
-  assert.equal(await readWavSampleRate(await archive.file('task1_TASK-1001.wav').async('blob')), 24000);
+  assert.equal(await readWavSampleRate(await archive.file('task1_TASK-1001.wav').async('blob')), 48000);
 });
 
 test('session export is untrimmed and All uses untrimmed audio only for session', async () => {
@@ -162,17 +173,52 @@ test('session export is untrimmed and All uses untrimmed audio only for session'
 
   assert.equal(getSessionAudioSource(recordings[0]), recordings[0].untrimmedBlob);
   const sessionBlob = await createSessionAudioBlob(recordings);
-  assert.equal(await readWavSampleRate(sessionBlob), 24000);
+  assert.equal(await readWavSampleRate(sessionBlob), 48000);
   assert.deepEqual(decodedInputs, ['raw-0', 'raw-1']);
 
   installDownloadCapture();
   await exportSessionAudioFile(recordings, 'TASK-1001');
-  assert.equal(await readWavSampleRate(downloads[0].blob), 24000);
+  assert.equal(await readWavSampleRate(downloads[0].blob), 48000);
 
   await exportAllFiles(recordings, 'TASK-1001');
   const archive = await JSZip.loadAsync(downloads[1].blob);
-  assert.equal(await readWavSampleRate(await archive.file('TASK-1001_session.wav').async('blob')), 24000);
-  assert.equal(await readWavSampleRate(await archive.file('task1_TASK-1001.wav').async('blob')), 24000);
+  assert.equal(await readWavSampleRate(await archive.file('TASK-1001_session.wav').async('blob')), 48000);
+  assert.equal(await readWavSampleRate(await archive.file('task1_TASK-1001.wav').async('blob')), 48000);
+});
+
+test('individual and session WAV files always export as 48 kHz mono 16-bit PCM', async () => {
+  const recordings = makeRecordings(1).map((recording) => ({
+    ...recording,
+    blob: new Blob(['raw-individual'], { type: 'audio/webm' }),
+    untrimmedBlob: new Blob(['raw-session'], { type: 'audio/webm' }),
+  }));
+  const decodedBuffer = {
+    numberOfChannels: 2,
+    sampleRate: 44100,
+    length: 4,
+    getChannelData: (channel) => Float32Array.from(channel === 0
+      ? [0.25, 0.25, 0.25, 0.25]
+      : [0.75, 0.75, 0.75, 0.75]),
+  };
+
+  globalThis.window = {
+    AudioContext: class {
+      decodeAudioData = async () => decodedBuffer;
+      close = async () => {};
+    },
+  };
+
+  const individualFiles = await createIndividualWavFiles(recordings, 'TASK-1001');
+  const sessionBlob = await createSessionAudioBlob(recordings);
+  const expectedFormat = {
+    audioFormat: 1,
+    channels: 1,
+    sampleRate: 48000,
+    bitsPerSample: 16,
+  };
+
+  assert.deepEqual(await readWavFormat(individualFiles[0].blob), expectedFormat);
+  assert.deepEqual(await readWavFormat(sessionBlob), expectedFormat);
 });
 
 test('200 recorded prompts produce 200 individual files', async () => {

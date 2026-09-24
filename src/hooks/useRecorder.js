@@ -108,11 +108,24 @@ export const useRecorder = ({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate: { ideal: 24000 },
+          sampleRate: { ideal: 48000 },
           channelCount: 1,
         },
       });
       streamRef.current = stream;
+      const audioTrack = stream.getAudioTracks()[0];
+      const settings = audioTrack?.getSettings?.() ?? {};
+      console.log('[audio] microphone format', {
+        sampleRate: settings.sampleRate ?? 'unknown',
+        is44_1kHz: settings.sampleRate === 44100,
+        channels: settings.channelCount ?? 'unknown',
+        isMono: settings.channelCount === 1,
+        captureBitRate: settings.bitRate ?? 'unknown (browser track setting)',
+        captureBitDepth: settings.bitDepth ?? 'unknown (browser track setting)',
+        outputBitsPerSample: 16,
+        requestedSampleRate: 48000,
+        requestedChannels: 1,
+      });
       if (onStreamReady) onStreamReady(stream);
       setStatus('Microphone permission granted. Press Record to begin.');
       return true;
