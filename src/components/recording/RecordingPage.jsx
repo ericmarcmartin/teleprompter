@@ -38,6 +38,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     activePrompt,
     completedPrompts,
     savedRecordings,
+    isPreparingRecordings,
     isSessionComplete,
     countdown,
     countdownSettling,
@@ -66,31 +67,48 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     if (isRecording) setStatus('Finish or stop recording to enable exports.');
   };
 
-  const runExport = async (exportName, exportOperation) => {
+  const prepareDownloadTarget = () => {
+    if (typeof window === 'undefined' || !window.open) return null;
+
+    try {
+      const target = window.open('', '_blank');
+      if (!target) return null;
+      target.document.title = 'Preparing download';
+      target.document.body.textContent = 'Preparing download... This tab will automatically close once download starts.';
+      return target;
+    } catch (error) {
+      console.warn('Unable to reserve a download target; using standard download.', error);
+      return null;
+    }
+  };
+
+  const runExport = async (exportName, exportOperation, reserveDownload = true, waitForPaint = true) => {
     if (activeExportRef.current) return;
 
     activeExportRef.current = exportName;
+    const downloadTarget = reserveDownload ? prepareDownloadTarget() : null;
     setActiveExport(exportName);
-    setExportOverlay({ exportName, isProcessing: true, retry: () => runExport(exportName, exportOperation) });
+    setExportOverlay({ exportName, isProcessing: true, retry: () => runExport(exportName, exportOperation, reserveDownload, waitForPaint) });
     try {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const statusMessage = await exportOperation();
+      if (waitForPaint) await new Promise((resolve) => requestAnimationFrame(resolve));
+      const statusMessage = await exportOperation(downloadTarget);
       applyExportStatus(statusMessage);
-      setExportOverlay({ exportName, isProcessing: false, retry: () => runExport(exportName, exportOperation) });
+      setExportOverlay({ exportName, isProcessing: false, retry: () => runExport(exportName, exportOperation, reserveDownload, waitForPaint) });
     } catch (error) {
       console.error(`Unable to complete ${exportName} export`, error);
       applyExportStatus('Export failed. Please try again.');
-      setExportOverlay({ exportName, isProcessing: false, failed: true, retry: () => runExport(exportName, exportOperation) });
+      if (downloadTarget && !downloadTarget.closed) downloadTarget.close();
+      setExportOverlay({ exportName, isProcessing: false, failed: true, retry: () => runExport(exportName, exportOperation, reserveDownload, waitForPaint) });
     } finally {
       activeExportRef.current = null;
       setActiveExport(null);
     }
   };
 
-  const handleExportTimestamp = () => runExport('timestamp', () => exportTimestampFile(savedRecordings, taskId));
-  const handleExportIndividual = () => runExport('individual', () => exportIndividualRecordingFiles(savedRecordings, taskId));
-  const handleExportSession = () => runExport('session', () => exportSessionAudioFile(savedRecordings, taskId));
-  const handleExportAll = () => runExport('all', () => exportAllFiles(savedRecordings, taskId));
+  const handleExportTimestamp = () => runExport('timestamp', () => exportTimestampFile(savedRecordings, taskId), false, false);
+  const handleExportIndividual = () => runExport('individual', (downloadTarget) => exportIndividualRecordingFiles(savedRecordings, taskId, downloadTarget));
+  const handleExportSession = () => runExport('session', (downloadTarget) => exportSessionAudioFile(savedRecordings, taskId, downloadTarget));
+  const handleExportAll = () => runExport('all', (downloadTarget) => exportAllFiles(savedRecordings, taskId, downloadTarget));
 
   const handleDownloadSelected = async () => {
     await runExport('selected', async () => {
@@ -98,7 +116,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
       applyExportStatus(result.status);
       if (result.completed) setIsExportMode(false);
       return null;
-    });
+    }, false);
   };
 
   const handleSelectPrompt = useCallback((index) => {
@@ -224,6 +242,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
       <ExportSidebar
         activeExport={activeExport}
         isRecording={isRecording}
+        isPreparingRecordings={isPreparingRecordings}
         onRecordingExportAttempt={handleRecordingExportAttempt}
         onExportTimestamp={handleExportTimestamp}
         onExportIndividual={handleExportIndividual}

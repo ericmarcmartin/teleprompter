@@ -28,8 +28,31 @@ export const toTranscriptFilename = (taskId) => {
   return `${taskId || 'task'}_${timestamp}_transcript.txt`;
 };
 
-export const downloadBlob = (blob, filename) => {
+export const downloadBlob = (blob, filename, downloadTarget = null) => {
   const url = URL.createObjectURL(blob);
+  if (downloadTarget && !downloadTarget.closed) {
+    const targetDocument = downloadTarget.document;
+    const anchor = targetDocument.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.textContent = 'Download again';
+    targetDocument.body.replaceChildren(
+      targetDocument.createTextNode('Preparing download... This tab will automatically close once download starts.')
+    );
+    targetDocument.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    downloadTarget.opener?.focus();
+    window.focus();
+    setTimeout(() => {
+      downloadTarget.opener?.focus();
+      downloadTarget.close();
+      window.focus();
+    }, 1500);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return;
+  }
+
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;

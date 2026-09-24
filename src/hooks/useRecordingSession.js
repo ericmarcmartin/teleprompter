@@ -107,6 +107,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
   const [completedPrompts, setCompletedPrompts] = useState([]);
   const [transcript, setTranscript] = useState([]);
   const [savedRecordings, setSavedRecordings] = useState([]);
+  const [isPreparingRecordings, setIsPreparingRecordings] = useState(false);
   // True only when the timer crossed the FINAL task boundary naturally —
   // a manual Stop (even on the last task) leaves this false so the display
   // can distinguish "session complete" from "stopped early".
@@ -207,52 +208,56 @@ export const useRecordingSession = ({ taskId, playback }) => {
       return;
     }
     exportInProgressRef.current = true;
+    setIsPreparingRecordings(true);
 
-    setTranscript([...transcriptRef.current]);
-    setIsRecording(false);
-    setIsPaused(false);
-    isPausedRef.current = false;
-    recorder.stopRequestedRef.current = false;
-    waveform.clearWaveform();
+    try {
+      setTranscript([...transcriptRef.current]);
+      setIsRecording(false);
+      setIsPaused(false);
+      isPausedRef.current = false;
+      recorder.stopRequestedRef.current = false;
+      waveform.clearWaveform();
 
-    const rawRecordings = recorder.perPromptRecordingsRef.current.filter((rec) => rec && rec.blob);
+      const rawRecordings = recorder.perPromptRecordingsRef.current.filter((rec) => rec && rec.blob);
 
-    const audioContextClass = window.AudioContext || window.webkitAudioContext;
-    let trimmedRecordings = rawRecordings;
-    if (audioContextClass) {
-      const audioContext = new audioContextClass();
-      try {
-        trimmedRecordings = await Promise.all(rawRecordings.map((rec) => trimPerPromptRecording(rec, audioContext)));
-      } finally {
-        audioContext.close().catch(() => undefined);
+      const audioContextClass = window.AudioContext || window.webkitAudioContext;
+      let trimmedRecordings = rawRecordings;
+      if (audioContextClass) {
+        const audioContext = new audioContextClass();
+        try {
+          trimmedRecordings = await Promise.all(rawRecordings.map((rec) => trimPerPromptRecording(rec, audioContext)));
+        } finally {
+          audioContext.close().catch(() => undefined);
+        }
       }
+
+      const newRecordings = trimmedRecordings.map((rec) => {
+        const audioUrl = URL.createObjectURL(rec.blob);
+        return {
+          id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
+          taskId,
+          promptIndex: rec.promptIndex,
+          transcript: rec.entry ? [rec.entry] : [],
+          blob: rec.blob,
+          untrimmedBlob: rec.untrimmedBlob ?? rec.blob,
+          audioUrl,
+          rawDurationMs: rec.rawDurationMs ?? null,
+          trimStartMs: rec.trimStartMs ?? 0,
+          trimmedDurationMs: rec.trimmedDurationMs ?? null,
+          audioBuffer: rec.audioBuffer ?? null,
+          createdAt: new Date().toISOString(),
+        };
+      });
+
+      // Keep every merged take — no cap: sessions can have more than 100 tasks.
+      setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings));
+      setStatus(`${newRecordings.length} task recording${newRecordings.length !== 1 ? 's' : ''} saved. Export when you are ready.`);
+
+      recorder.stopStream();
+    } finally {
+      setIsPreparingRecordings(false);
+      exportInProgressRef.current = false;
     }
-
-    const newRecordings = trimmedRecordings.map((rec) => {
-      const audioUrl = URL.createObjectURL(rec.blob);
-      return {
-        id: `${taskId}-p${rec.promptIndex}-${Date.now()}`,
-        taskId,
-        promptIndex: rec.promptIndex,
-        transcript: rec.entry ? [rec.entry] : [],
-        blob: rec.blob,
-        untrimmedBlob: rec.untrimmedBlob ?? rec.blob,
-        audioUrl,
-        rawDurationMs: rec.rawDurationMs ?? null,
-        trimStartMs: rec.trimStartMs ?? 0,
-        trimmedDurationMs: rec.trimmedDurationMs ?? null,
-        audioBuffer: rec.audioBuffer ?? null,
-        createdAt: new Date().toISOString(),
-      };
-    });
-
-    // Keep every merged take — no cap: sessions can have more than 100 tasks.
-    setSavedRecordings((previous) => mergeSavedRecordings(previous, newRecordings));
-    setStatus(`${newRecordings.length} task recording${newRecordings.length !== 1 ? 's' : ''} saved. Export when you are ready.`);
-
-    recorder.stopStream();
-
-    exportInProgressRef.current = false;
   };
 
   // Runs when the inter-task transition gap ends: fold the gap into paused
@@ -592,6 +597,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     completedPrompts,
     transcript,
     savedRecordings,
+    isPreparingRecordings,
     isAudioSupported,
     isSessionComplete,
     countdown: timers.countdown,

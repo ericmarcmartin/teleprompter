@@ -82,7 +82,7 @@ export const createIndividualWavFiles = async (recordings, taskId) => {
 export const getSessionAudioSource = (recording) =>
   recording.untrimmedBlob || recording.blob || recording.audioBuffer;
 
-export const exportTimestampFile = (recordings, taskId) => {
+export const exportTimestampFile = (recordings, taskId, downloadTarget = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for timestamp export.';
   }
@@ -90,11 +90,11 @@ export const exportTimestampFile = (recordings, taskId) => {
   const csv = buildTimestampCsv(recordings);
   const blob = createTimestampBlob(recordings);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(blob, `${taskId || 'task'}_${timestamp}_timestamps.csv`);
+  downloadBlob(blob, `${taskId || 'task'}_${timestamp}_timestamps.csv`, downloadTarget);
   return 'Timestamp CSV exported.';
 };
 
-export const exportIndividualRecordingFiles = async (recordings, taskId) => {
+export const exportIndividualRecordingFiles = async (recordings, taskId, downloadTarget = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for individual export.';
   }
@@ -111,7 +111,7 @@ export const exportIndividualRecordingFiles = async (recordings, taskId) => {
 
   const archive = await zip.generateAsync({ type: 'blob' });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_individual_recordings.zip`);
+  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_individual_recordings.zip`, downloadTarget);
   return `Exported ${files.length} individual recordings in a ZIP.`;
 };
 
@@ -144,7 +144,7 @@ export const createSessionAudioBlob = async (recordings) => {
   }
 };
 
-export const exportSessionAudioFile = async (recordings, taskId) => {
+export const exportSessionAudioFile = async (recordings, taskId, downloadTarget = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for session export.';
   }
@@ -156,7 +156,7 @@ export const exportSessionAudioFile = async (recordings, taskId) => {
 
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob(wavBlob, `${taskId || 'task'}_${timestamp}_session.wav`);
+    downloadBlob(wavBlob, `${taskId || 'task'}_${timestamp}_session.wav`, downloadTarget);
     return 'Session audio exported as a single file.';
   } catch (error) {
     console.error('Unable to merge session recording', error);
@@ -164,7 +164,7 @@ export const exportSessionAudioFile = async (recordings, taskId) => {
   }
 };
 
-export const exportAllFiles = async (recordings, taskId) => {
+export const exportAllFiles = async (recordings, taskId, downloadTarget = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for full export.';
   }
@@ -188,7 +188,7 @@ export const exportAllFiles = async (recordings, taskId) => {
 
   const archive = await zip.generateAsync({ type: 'blob' });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_export.zip`);
+  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_export.zip`, downloadTarget);
   return `Full export ZIP generated for ${taskId}.`;
 };
 
