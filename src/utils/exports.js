@@ -52,12 +52,15 @@ const createTimestampBlob = (recordings) => new Blob([buildTimestampCsv(recordin
   type: 'text/csv;charset=utf-8',
 });
 
+export const getIndividualAudioSource = (recording) => recording.blob;
+
 const createIndividualWavFiles = async (recordings, taskId) => {
-  const validRecordings = recordings.filter((rec) => rec.blob);
+  const validRecordings = recordings.filter((rec) => getIndividualAudioSource(rec));
   const files = [];
 
   for (const rec of validRecordings) {
-    const wavBlob = rec.blob.type === 'audio/wav' ? rec.blob : await convertBlobToWav(rec.blob);
+    const source = getIndividualAudioSource(rec);
+    const wavBlob = source.type === 'audio/wav' ? source : await convertBlobToWav(source);
     if (!wavBlob) continue;
 
     const effectiveTaskId = rec.taskId || taskId;
@@ -70,8 +73,11 @@ const createIndividualWavFiles = async (recordings, taskId) => {
   return files;
 };
 
+// AI NOTE: NEVER change this export matrix without updating the tests and
+// product requirement: Individual = trimmed, Session = untrimmed, and Full =
+// trimmed individual files plus an untrimmed session file.
 export const getSessionAudioSource = (recording) =>
-  recording.audioBuffer || recording.blob || recording.untrimmedBlob;
+  recording.untrimmedBlob || recording.blob || recording.audioBuffer;
 
 export const exportTimestampFile = (recordings, taskId) => {
   if (recordings.length === 0) {
@@ -161,6 +167,8 @@ export const exportAllFiles = async (recordings, taskId) => {
   }
 
   const timestampBlob = createTimestampBlob(recordings);
+  // AI NOTE: Full export intentionally keeps individual files trimmed. Only
+  // the session file below uses the untrimmed source.
   const individualFiles = await createIndividualWavFiles(recordings, taskId);
   const sessionBlob = await createSessionAudioBlob(recordings);
 

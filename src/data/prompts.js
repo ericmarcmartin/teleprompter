@@ -8,7 +8,6 @@
 // The future CSV loader must emit this exact shape.
 
 export const initialPromptSequence = [
-{ text: 'Hi Celia!', duration: 3, buffer: 2 },
   { text: 'Hey Celia!', duration: 3, buffer: 2 },
   { text: 'Hi Celia!', duration: 3, buffer: 2 },
   { text: 'Hey Celia!', duration: 3, buffer: 2 },
@@ -207,7 +206,8 @@ export const initialPromptSequence = [
   { text: 'Hi Celia!', duration: 3, buffer: 2 },
   { text: 'Hey Celia!', duration: 3, buffer: 2 },
   { text: 'Hi Celia!', duration: 3, buffer: 2 },
-  { text: 'Hey Celia!', duration: 3, buffer: 2 }
+  { text: 'Hey Celia!', duration: 3, buffer: 2 },
+  { text: 'Hi Celia!', duration: 3, buffer: 2 }
 ];
 
 export const taskOptions = [

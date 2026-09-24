@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildTimestampCsv, buildTimestampRows, getSessionAudioSource } from './exports.js';
+import {
+  buildTimestampCsv,
+  buildTimestampRows,
+  getIndividualAudioSource,
+  getSessionAudioSource,
+} from './exports.js';
 
-test('session export prefers trimmed audio and falls back for legacy records', () => {
+test('session and full exports prefer untrimmed audio and fall back for legacy records', () => {
   const rawBlob = { name: 'raw' };
   const trimmedBlob = { name: 'trimmed' };
   const trimmedBuffer = { name: 'trimmed-buffer' };
@@ -12,9 +17,17 @@ test('session export prefers trimmed audio and falls back for legacy records', (
     untrimmedBlob: rawBlob,
     blob: trimmedBlob,
     audioBuffer: trimmedBuffer,
-  }), trimmedBuffer);
-  assert.equal(getSessionAudioSource({ blob: trimmedBlob, audioBuffer: trimmedBuffer }), trimmedBuffer);
+  }), rawBlob);
+  assert.equal(getSessionAudioSource({ blob: trimmedBlob, audioBuffer: trimmedBuffer }), trimmedBlob);
   assert.equal(getSessionAudioSource({ blob: trimmedBlob }), trimmedBlob);
+});
+
+test('individual audio stays trimmed in standalone and full exports', () => {
+  const rawBlob = { name: 'raw' };
+  const trimmedBlob = { name: 'trimmed' };
+  const recording = { untrimmedBlob: rawBlob, blob: trimmedBlob };
+
+  assert.equal(getIndividualAudioSource(recording), trimmedBlob);
 });
 
 test('buildTimestampRows chains Start/Duration contiguously from trimmed values', () => {
