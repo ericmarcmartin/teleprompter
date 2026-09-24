@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 const SavedRecordingsList = ({ recordings, playingRecordingId, onPlayRecording }) => (
   <div className="saved-recordings">
     <div className="saved-recordings-header">Saved recordings — {recordings.length} task{recordings.length !== 1 ? 's' : ''}</div>
@@ -49,4 +51,4 @@ const SavedRecordingsList = ({ recordings, playingRecordingId, onPlayRecording }
   </div>
 );
 
-export default SavedRecordingsList;
+export default memo(SavedRecordingsList);

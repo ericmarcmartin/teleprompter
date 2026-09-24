@@ -52,7 +52,6 @@ export const useTimers = ({
 }) => {
   const [recordingTime, setRecordingTime] = useState(0); // per-task elapsed ms
   const [frozenTimerMs, setFrozenTimerMs] = useState(0); // per-task, frozen at stop
-  const [progress, setProgress] = useState(0);
   const [countdown, setCountdown] = useState(0);
   // True during the hidden 1s tail after the visible 3-2-1 ends — the display
   // fades the countdown block out instead of freezing on "1".
@@ -135,10 +134,9 @@ export const useTimers = ({
   };
 
   // --- Recording tick (self-rescheduling setTimeout chain) -------------------
-  // The tick owns the per-task clock and progress bar. When a prompt boundary
-  // is crossed it calls onBoundary (session code) which decides what the
-  // boundary means; if the session reports the final prompt, the tick stops
-  // updating afterwards.
+  // The tick owns the per-task clock. When a prompt boundary is crossed it
+  // calls onBoundary (session code) which decides what the boundary means; if
+  // the session reports the final prompt, the tick stops updating afterwards.
   //
   // The chain reschedules itself at min(100ms, time-to-boundary) so boundary
   // crossings land exactly on the prompt's exact-second end (e.g. 2.000s)
@@ -177,7 +175,7 @@ export const useTimers = ({
         return;
       }
 
-      // FREEZE timer and progress during inter-task transition buffer
+      // FREEZE the task timer during the inter-task transition buffer
       if (transitionCountdownMsRef.current > 0) {
         scheduleNextTick(100);
         return;
@@ -194,14 +192,10 @@ export const useTimers = ({
       const promptStart = promptStartRef.current;
       const elapsedInPrompt = now - promptStart;
       const durationMs = currentItem.duration * 1000;
-      const newProgress = Math.min((elapsedInPrompt / durationMs) * 100, 100);
-
       if (elapsedInPrompt >= durationMs) {
-        // Snapshot the exact boundary-moment display values BEFORE onBoundary
-        // runs: the handler starts the transition countdown synchronously, and
-        // the final timer/progress update must still land on this tick.
+        // Snapshot the exact boundary-moment timer value BEFORE onBoundary
+        // runs: the handler starts the transition countdown synchronously.
         setRecordingTime(durationMs);
-        setProgress(100);
 
         const result = onBoundary({ now, currentIndex, currentItem, promptStartMs: promptStart });
         if (result?.final) {
@@ -217,13 +211,12 @@ export const useTimers = ({
       // Per-task clock: reads 00:00:00.000 at task start, exactly the task
       // duration (e.g. 00:00:02.000) at the boundary.
       setRecordingTime(elapsedInPrompt);
-      setProgress(newProgress);
       scheduleNextTick(Math.min(100, durationMs - elapsedInPrompt));
     };
 
     tickRef.current = tick;
-    // Fire one synchronous tick so the recorder, clock, and progress bar all
-    // start in the same frame.
+    // Fire one synchronous tick so the recorder and clock start in the same
+    // frame.
     tick();
   };
 
@@ -352,13 +345,11 @@ export const useTimers = ({
     promptElapsedMsRef.current = 0;
   };
 
-  // Manual task-box selection: restart the prompt clock, per-task timer, and
-  // progress bar.
+  // Manual task-box selection: restart the prompt clock and per-task timer.
   const markPromptStart = () => {
     promptStartRef.current = Date.now();
     promptElapsedMsRef.current = 0;
     setRecordingTime(0);
-    setProgress(0);
   };
 
   // FREEZE-ON-STOP: synchronously snapshot the stop-moment clock values into
@@ -429,7 +420,6 @@ export const useTimers = ({
 
     setRecordingTime(0);
     setFrozenTimerMs(0);
-    setProgress(0);
     setCountdown(0);
     setCountdownSettling(false);
     setTransitionCountdownMs(0);
@@ -439,7 +429,6 @@ export const useTimers = ({
     // state
     recordingTime,
     frozenTimerMs,
-    progress,
     countdown,
     countdownSettling,
     transitionCountdownMs,
@@ -447,8 +436,6 @@ export const useTimers = ({
     startRef,
     frozenTimeRef,
     frozenProgressRef,
-    // setters used by session edge cases
-    setProgress,
     // methods
     isCountdownActive,
     beginCountdown,

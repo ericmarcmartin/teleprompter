@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { initialPromptSequence } from '../../data/prompts.js';
 import {
@@ -24,6 +24,8 @@ const TOTAL_DURATION_MS = initialPromptSequence.reduce((sum, p) => sum + p.durat
 const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
   const [downloadPromptIndex, setDownloadPromptIndex] = useState('all');
   const [isExportMode, setIsExportMode] = useState(false);
+  const [activeExport, setActiveExport] = useState(null);
+  const activeExportRef = useRef(null);
 
   const {
     status,
@@ -41,7 +43,6 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     transitionCountdownMs,
     recordingTime,
     frozenTimerMs,
-    progress,
     waveformLevels,
     frozenActiveIndexRef,
     frozenCompletedRef,
@@ -60,10 +61,30 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     if (statusMessage) setStatus(statusMessage);
   };
 
-  const handleExportTimestamp = () => applyExportStatus(exportTimestampFile(savedRecordings, taskId));
-  const handleExportIndividual = async () => applyExportStatus(await exportIndividualRecordingFiles(savedRecordings, taskId));
-  const handleExportSession = async () => applyExportStatus(await exportSessionAudioFile(savedRecordings, taskId));
-  const handleExportAll = async () => applyExportStatus(await exportAllFiles(savedRecordings, taskId));
+  const handleRecordingExportAttempt = () => {
+    if (isRecording) setStatus('Finish or stop recording to enable exports.');
+  };
+
+  const runExport = async (exportName, exportOperation) => {
+    if (activeExportRef.current) return;
+
+    activeExportRef.current = exportName;
+    setActiveExport(exportName);
+    try {
+      applyExportStatus(await exportOperation());
+    } catch (error) {
+      console.error(`Unable to complete ${exportName} export`, error);
+      applyExportStatus('Export failed. Please try again.');
+    } finally {
+      activeExportRef.current = null;
+      setActiveExport(null);
+    }
+  };
+
+  const handleExportTimestamp = () => runExport('timestamp', () => exportTimestampFile(savedRecordings, taskId));
+  const handleExportIndividual = () => runExport('individual', () => exportIndividualRecordingFiles(savedRecordings, taskId));
+  const handleExportSession = () => runExport('session', () => exportSessionAudioFile(savedRecordings, taskId));
+  const handleExportAll = () => runExport('all', () => exportAllFiles(savedRecordings, taskId));
 
   const handleDownloadSelected = async () => {
     const result = await downloadSelectedPrompt(savedRecordings, downloadPromptIndex, taskId);
@@ -73,7 +94,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     }
   };
 
-  const handleSelectPrompt = (index) => {
+  const handleSelectPrompt = useCallback((index) => {
     if (isExportMode) {
       setDownloadPromptIndex(index === 0 && downloadPromptIndex === 'all' ? 'all' : String(index));
       setStatus(index === 0 && downloadPromptIndex === 'all' ? 'All tasks selected for export' : `Task ${index + 1} selected for export`);
@@ -81,7 +102,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     }
 
     selectTask(index);
-  };
+  }, [downloadPromptIndex, isExportMode, selectTask, setStatus]);
 
   return (
     <div className="recording-layout">
@@ -114,8 +135,15 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
 
         <Waveform levels={waveformLevels} />
 
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${isStopped ? frozenProgressRef.current : progress}%` }} />
+        <div className="progress-track" aria-label="Task progress">
+          <div
+            key={`${currentPromptIndex}-${isStopped ? 'stopped' : 'active'}`}
+            className={`progress-fill${isRecording ? ' is-recording' : ''}${isPaused ? ' is-paused' : ''}${transitionCountdownMs > 0 ? ' is-buffering' : ''}${isStopped ? ' is-stopped' : ''}`}
+            style={{
+              '--progress-duration': `${activePrompt.duration}s`,
+              '--progress-scale': isStopped ? frozenProgressRef.current / 100 : 0,
+            }}
+          />
         </div>
 
         <div className="controls">
@@ -187,6 +215,9 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
       </div>
 
       <ExportSidebar
+        activeExport={activeExport}
+        isRecording={isRecording}
+        onRecordingExportAttempt={handleRecordingExportAttempt}
         onExportTimestamp={handleExportTimestamp}
         onExportIndividual={handleExportIndividual}
         onExportSession={handleExportSession}

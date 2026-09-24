@@ -338,7 +338,6 @@ export const useRecordingSession = ({ taskId, playback }) => {
     setIsSessionComplete(true);
     setStatus('Recording finished.');
     frozenStatusRef.current = 'Recording finished.';
-    timers.setProgress(100);
     timers.freezeClocks(finishedElapsed);
     stopRecordingAndExport();
     return { final: true };
@@ -600,7 +599,6 @@ export const useRecordingSession = ({ taskId, playback }) => {
     transitionCountdownMs: timers.transitionCountdownMs,
     recordingTime: timers.recordingTime,
     frozenTimerMs: timers.frozenTimerMs,
-    progress: timers.progress,
     waveformLevels: waveform.waveformLevels,
     // refs read by the JSX (freeze-on-stop + audio element)
     frozenActiveIndexRef,
