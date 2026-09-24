@@ -12,6 +12,7 @@ export const useRecorder = ({
   transcriptRef,
   isAudioSupported,
   onStreamReady,
+  onPromptRecorded,
   onFinalPromptRecorded,
 }) => {
   const streamRef = useRef(null);
@@ -31,8 +32,14 @@ export const useRecorder = ({
     const chunks = [];
     recordedChunksRef.current = chunks;
 
-    const recorder = new MediaRecorder(streamRef.current);
-    mediaRecorderRef.current = recorder;
+    let recorder;
+    try {
+      recorder = new MediaRecorder(streamRef.current);
+      mediaRecorderRef.current = recorder;
+    } catch (error) {
+      recorderReadyRef.current = false;
+      throw error;
+    }
 
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -62,6 +69,8 @@ export const useRecorder = ({
         entry,
       });
 
+      onPromptRecorded?.(promptIndex - 1);
+
       if (isFinalPrompt) {
         onFinalPromptRecorded();
       }
@@ -70,8 +79,14 @@ export const useRecorder = ({
     // 100ms timeslice: chunks flush throughout the prompt and the capture
     // timeline is anchored to the start() call, so the recorder aligns with
     // the session clock and progress bar.
-    recorder.start(100);
-    recorderReadyRef.current = true;
+    try {
+      recorder.start(100);
+      recorderReadyRef.current = true;
+    } catch (error) {
+      recorderReadyRef.current = false;
+      mediaRecorderRef.current = null;
+      throw error;
+    }
   };
 
   const requestRecordingPermission = async () => {

@@ -127,6 +127,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
     transcriptRef,
     isAudioSupported,
     onStreamReady: (stream) => waveform.setupAudioWaveform(stream),
+    onPromptRecorded: (index) => markPromptCompleted(index),
     onFinalPromptRecorded: () => {
       setStatus('Recording finished.');
       setIsStopped(true);
@@ -249,15 +250,24 @@ export const useRecordingSession = ({ taskId, playback }) => {
   // Runs when the inter-task transition gap ends: fold the gap into paused
   // time, reset the prompt clock, unmute the mic, and start the next recorder.
   const resumeNextPrompt = (nextIndex, nextPrompt) => {
-    timers.completeTransition();
-
     setCurrentPromptIndex(nextIndex);
     currentPromptIndexRef.current = nextIndex;
     setActivePrompt(nextPrompt);
     setStatus(`Task ${nextIndex + 1} of ${initialPromptSequence.length}`);
 
     recorder.setMicrophoneEnabled(true);
-    recorder.startRecorderForPrompt(nextIndex + 1);
+    try {
+      recorder.startRecorderForPrompt(nextIndex + 1);
+    } catch (error) {
+      console.error('Unable to continue recording', error);
+      recorder.recorderReadyRef.current = true;
+      recorder.stopRequestedRef.current = true;
+      setIsRecording(false);
+      setIsStopped(true);
+      setStatus('Recording could not continue.');
+      return;
+    }
+    timers.completeTransition();
   };
 
   // Prompt-boundary reaction, invoked by the timer tick. Returns { final }
@@ -377,6 +387,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
       setIsStarting(false);
     } catch (error) {
       console.error('Unable to start recording', error);
+      recorder.recorderReadyRef.current = true;
       setStatus('Recording could not start.');
       setIsRecording(false);
       setIsStarting(false);
