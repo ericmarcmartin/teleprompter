@@ -5,7 +5,8 @@ import { initialPromptSequence } from '../data/prompts.js';
 import JSZip from 'jszip';
 
 import { downloadBlob, formatDecimalTime } from './format.js';
-import { convertBlobToWav, mergeAudioBuffersToWav } from './wav.js';
+import { convertBlobToWav } from './wav.js';
+import { mergeAudioBuffersInWorker } from './audioExportWorker.js';
 
 const TIMESTAMP_CSV_HEADER = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
 
@@ -137,7 +138,7 @@ export const createSessionAudioBlob = async (recordings) => {
       return context.decodeAudioData(arrayBuffer.slice(0));
     }));
 
-    return mergeAudioBuffersToWav(buffers);
+    return mergeAudioBuffersInWorker(buffers);
   } finally {
     if (context) context.close().catch(() => undefined);
   }

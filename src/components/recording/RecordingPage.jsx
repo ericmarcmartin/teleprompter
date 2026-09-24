@@ -25,6 +25,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
   const [downloadPromptIndex, setDownloadPromptIndex] = useState('all');
   const [isExportMode, setIsExportMode] = useState(false);
   const [activeExport, setActiveExport] = useState(null);
+  const [exportOverlay, setExportOverlay] = useState(null);
   const activeExportRef = useRef(null);
 
   const {
@@ -70,11 +71,16 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
 
     activeExportRef.current = exportName;
     setActiveExport(exportName);
+    setExportOverlay({ exportName, isProcessing: true, retry: () => runExport(exportName, exportOperation) });
     try {
-      applyExportStatus(await exportOperation());
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const statusMessage = await exportOperation();
+      applyExportStatus(statusMessage);
+      setExportOverlay({ exportName, isProcessing: false, retry: () => runExport(exportName, exportOperation) });
     } catch (error) {
       console.error(`Unable to complete ${exportName} export`, error);
       applyExportStatus('Export failed. Please try again.');
+      setExportOverlay({ exportName, isProcessing: false, failed: true, retry: () => runExport(exportName, exportOperation) });
     } finally {
       activeExportRef.current = null;
       setActiveExport(null);
@@ -87,11 +93,12 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
   const handleExportAll = () => runExport('all', () => exportAllFiles(savedRecordings, taskId));
 
   const handleDownloadSelected = async () => {
-    const result = await downloadSelectedPrompt(savedRecordings, downloadPromptIndex, taskId);
-    applyExportStatus(result.status);
-    if (result.completed) {
-      setIsExportMode(false);
-    }
+    await runExport('selected', async () => {
+      const result = await downloadSelectedPrompt(savedRecordings, downloadPromptIndex, taskId);
+      applyExportStatus(result.status);
+      if (result.completed) setIsExportMode(false);
+      return null;
+    });
   };
 
   const handleSelectPrompt = useCallback((index) => {
@@ -223,6 +230,32 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
         onExportSession={handleExportSession}
         onExportAll={handleExportAll}
       />
+
+      {exportOverlay && (
+        <div className="export-overlay" role="dialog" aria-modal="true" aria-labelledby="export-overlay-title">
+          <div className="export-overlay-card">
+            {exportOverlay.isProcessing ? <div className="export-overlay-spinner" aria-hidden="true" /> : null}
+            <strong id="export-overlay-title">
+              {exportOverlay.isProcessing
+                ? (exportOverlay.exportName === 'selected' ? 'Preparing download' : 'Processing export')
+                : (exportOverlay.failed ? 'Export failed' : 'Download should start')}
+            </strong>
+            <span>
+              {exportOverlay.isProcessing
+                ? 'Please keep this window open.'
+                : (exportOverlay.failed ? 'Try the download again or close this message.' : 'If it does not, click the button below.')}
+            </span>
+            {!exportOverlay.isProcessing && (
+              <div className="export-overlay-actions">
+                <button className="primary compact" onClick={exportOverlay.retry}>
+                  {exportOverlay.failed ? 'Try again' : 'Download again'}
+                </button>
+                <button className="ghost compact" onClick={() => setExportOverlay(null)}>Close</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

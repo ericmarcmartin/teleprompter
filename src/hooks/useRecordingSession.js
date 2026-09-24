@@ -46,8 +46,8 @@ import { initialPromptSequence } from '../data/prompts.js';
 import { mergeSavedRecordings } from '../recordings.js';
 import { getTaskWindowMs } from '../timing.js';
 import { trimSilenceFromAudioBuffer } from '../utils/audioTrim.js';
+import { encodeAudioBufferInWorker } from '../utils/audioExportWorker.js';
 import { formatTime } from '../utils/format.js';
-import { audioBufferToWavBlob } from '../utils/wav.js';
 import { useRecorder } from './useRecorder.js';
 import { useTimers } from './useTimers.js';
 import { useWaveform } from './useWaveform.js';
@@ -70,7 +70,7 @@ const trimPerPromptRecording = async (rec, audioContext) => {
     const arrayBuffer = await rec.blob.arrayBuffer();
     const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
     const { trimmedBuffer, onsetMs, durationMs } = trimSilenceFromAudioBuffer(decoded);
-    const wavBlob = audioBufferToWavBlob(trimmedBuffer);
+    const wavBlob = await encodeAudioBufferInWorker(trimmedBuffer);
     return {
       ...rec,
       untrimmedBlob: rec.blob,

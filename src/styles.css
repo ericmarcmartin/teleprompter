@@ -658,6 +658,74 @@ select:focus {
 .export-sidebar-btn--session    { --btn-accent: #14B8A6; }
 .export-sidebar-btn--all        { --btn-accent: #F59E0B; }
 
+.export-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.export-overlay-card {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  min-width: min(280px, 100%);
+  padding: 26px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 14px;
+  color: var(--navy);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.24);
+  text-align: center;
+}
+
+.export-overlay-card span {
+  color: var(--slate);
+  font-size: 0.82rem;
+}
+
+.export-overlay-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  width: 100%;
+}
+
+.export-overlay-actions button {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .export-overlay-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .export-overlay-actions button {
+    width: 100%;
+  }
+}
+
+.export-overlay-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(100, 116, 139, 0.22);
+  border-top-color: #0ea5e9;
+  border-radius: 50%;
+  animation: export-spinner 0.8s linear infinite;
+}
+
 .recording-header {
   display: flex;
   align-items: flex-start;
