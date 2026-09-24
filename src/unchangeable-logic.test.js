@@ -96,12 +96,12 @@ test.afterEach(() => {
   restoreDownloadCapture();
 });
 
-test('timestamp output is exported by Timestamp and All with raw-WAV voice starts', async () => {
+test('timestamp output is exported by Timestamp and All with buffered session voice starts', async () => {
   const recordings = makeRecordings();
   const expectedCsv = [
     'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description',
     'Task 1,0:00.100,0:00.200,decimal,Cue,',
-    'Task 2,0:05.100,0:00.200,decimal,Cue,',
+    'Task 2,0:07.100,0:00.200,decimal,Cue,',
   ].join('\n');
 
   installDownloadCapture();
@@ -120,7 +120,7 @@ test('timestamp output is exported by Timestamp and All with raw-WAV voice start
   assert.equal(await archive.file('TASK-1001_timestamps.csv').async('text'), expectedCsv);
 });
 
-test('timestamp export covers all 200 prompts on the raw-WAV timeline', async () => {
+test('timestamp export covers all 200 prompts on the buffered session timeline', async () => {
   const recordings = makeRecordings(200);
   const expectedHeader = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
 
@@ -131,8 +131,8 @@ test('timestamp export covers all 200 prompts on the raw-WAV timeline', async ()
   assert.equal(lines.length, 201);
   assert.equal(lines[0], expectedHeader);
   assert.equal(lines[1], 'Task 1,0:00.100,0:00.200,decimal,Cue,');
-  assert.equal(lines[2], 'Task 2,0:05.100,0:00.200,decimal,Cue,');
-  assert.equal(lines[200], 'Task 200,16:35.100,0:00.200,decimal,Cue,');
+  assert.equal(lines[2], 'Task 2,0:07.100,0:00.200,decimal,Cue,');
+  assert.equal(lines[200], 'Task 200,23:13.100,0:00.200,decimal,Cue,');
 });
 
 test('individual export is trimmed, including individual files inside All', async () => {

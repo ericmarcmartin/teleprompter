@@ -4,6 +4,18 @@ import { resampleAudioBuffer } from './resample.js';
 
 const WAV_BITS_PER_SAMPLE = 16;
 
+export const createSilenceAudioBuffer = (durationMs, sampleRate = 48000, numberOfChannels = 1) => {
+  const length = Math.max(1, Math.round((durationMs / 1000) * sampleRate));
+  const channelData = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+
+  return {
+    numberOfChannels,
+    sampleRate,
+    length,
+    getChannelData: (channel) => channelData[channel],
+  };
+};
+
 export const audioBufferToWavBlob = (audioBuffer) => {
   const normalizedBuffer = resampleAudioBuffer(audioBuffer);
   const channels = normalizedBuffer.numberOfChannels;

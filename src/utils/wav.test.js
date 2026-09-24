@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { audioBufferToWavBlob, mergeAudioBuffersToWav } from './wav.js';
+import { audioBufferToWavBlob, createSilenceAudioBuffer, mergeAudioBuffersToWav } from './wav.js';
 
 const makeFakeBuffer = (samples, sampleRate = 48000) => ({
   numberOfChannels: 1,
@@ -59,6 +59,15 @@ test('audioBufferToWavBlob round-trips PCM samples', async () => {
   });
   assert.ok(Math.abs(samples[1] - 0.5) < 0.001);
   assert.ok(Math.abs(samples[2] + 0.5) < 0.001);
+});
+
+test('createSilenceAudioBuffer creates zero-valued samples for a requested duration', () => {
+  const silence = createSilenceAudioBuffer(2000, 1000, 2);
+
+  assert.equal(silence.length, 2000);
+  assert.equal(silence.numberOfChannels, 2);
+  assert.ok(silence.getChannelData(0).every((sample) => sample === 0));
+  assert.ok(silence.getChannelData(1).every((sample) => sample === 0));
 });
 
 test('audioBufferToWavBlob normalizes high-rate input to 48 kHz', async () => {

@@ -5,7 +5,7 @@ import { initialPromptSequence } from '../data/prompts.js';
 import JSZip from 'jszip';
 
 import { downloadBlob, formatDecimalTime } from './format.js';
-import { convertBlobToWav } from './wav.js';
+import { convertBlobToWav, createSilenceAudioBuffer } from './wav.js';
 import { mergeAudioBuffersInWorker } from './audioExportWorker.js';
 
 const TIMESTAMP_CSV_HEADER = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
@@ -15,23 +15,37 @@ const csvEscape = (value) => {
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
-// Builds timestamps on the session WAV timeline. Session audio concatenates
-// raw clips, so each task starts at the cumulative raw duration of prior clips
-// plus its detected voice onset within its own raw clip.
+// Builds timestamps on the Session/Full WAV timeline, including the configured
+// silent transition buffer after each preceding task.
 export const buildTimestampRows = (recordings) => {
   const sorted = [...recordings].sort((a, b) => (a.promptIndex ?? 0) - (b.promptIndex ?? 0));
   const rows = [];
-  let rawTimelineMs = 0;
+  let sessionTimelineMs = 0;
+  let previousPromptIndex = 0;
 
   for (const rec of sorted) {
-    const configuredDurationMs = (initialPromptSequence[(rec.promptIndex ?? 1) - 1]?.duration ?? 0) * 1000;
+    const promptIndex = rec.promptIndex ?? 1;
+    for (let missingIndex = previousPromptIndex + 1; missingIndex < promptIndex; missingIndex += 1) {
+      const missingPrompt = initialPromptSequence[missingIndex - 1];
+      sessionTimelineMs += (missingPrompt?.duration ?? 0) * 1000;
+      if (missingIndex < initialPromptSequence.length) {
+        sessionTimelineMs += (missingPrompt?.buffer ?? 0) * 1000;
+      }
+    }
+
+    const prompt = initialPromptSequence[promptIndex - 1];
+    const configuredDurationMs = (prompt?.duration ?? 0) * 1000;
     const durationMs = rec.trimmedDurationMs ?? configuredDurationMs;
     const onsetMs = rec.trimStartMs ?? 0;
     const rawDurationMs = rec.rawDurationMs ?? configuredDurationMs;
-    const startMs = rawTimelineMs + onsetMs;
+    const startMs = sessionTimelineMs + onsetMs;
 
-    rows.push({ taskName: `Task ${rec.promptIndex}`, startMs, durationMs, promptIndex: rec.promptIndex });
-    rawTimelineMs += rawDurationMs;
+    rows.push({ taskName: `Task ${promptIndex}`, startMs, durationMs, promptIndex });
+    sessionTimelineMs += rawDurationMs;
+    if (promptIndex < initialPromptSequence.length) {
+      sessionTimelineMs += (prompt?.buffer ?? 0) * 1000;
+    }
+    previousPromptIndex = promptIndex;
   }
 
   return rows;
@@ -130,13 +144,25 @@ export const createSessionAudioBlob = async (recordings) => {
   }
 
   try {
-    const buffers = await Promise.all(sortedRecordings.map(async (recording) => {
+    const decodedByPrompt = new Map(await Promise.all(sortedRecordings.map(async (recording) => {
       const source = getSessionAudioSource(recording);
-      if (!(source instanceof Blob)) return source;
-      const sourceBlob = source;
-      const arrayBuffer = await sourceBlob.arrayBuffer();
-      return context.decodeAudioData(arrayBuffer.slice(0));
-    }));
+      if (!(source instanceof Blob)) return [recording.promptIndex, source];
+      const arrayBuffer = await source.arrayBuffer();
+      return [recording.promptIndex, await context.decodeAudioData(arrayBuffer.slice(0))];
+    })));
+
+    const referenceBuffer = decodedByPrompt.values().next().value;
+    const maxPromptIndex = Math.max(...sortedRecordings.map((recording) => recording.promptIndex ?? 0));
+    const buffers = [];
+    for (let promptIndex = 1; promptIndex <= maxPromptIndex; promptIndex += 1) {
+      const prompt = initialPromptSequence[promptIndex - 1];
+      const promptBuffer = decodedByPrompt.get(promptIndex)
+        || createSilenceAudioBuffer((prompt?.duration ?? 0) * 1000, referenceBuffer.sampleRate, referenceBuffer.numberOfChannels);
+      buffers.push(promptBuffer);
+      if (promptIndex < maxPromptIndex && promptIndex < initialPromptSequence.length) {
+        buffers.push(createSilenceAudioBuffer((prompt?.buffer ?? 0) * 1000, referenceBuffer.sampleRate, referenceBuffer.numberOfChannels));
+      }
+    }
 
     return mergeAudioBuffersInWorker(buffers);
   } finally {
