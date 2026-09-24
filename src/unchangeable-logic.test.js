@@ -76,6 +76,7 @@ const makeRecordings = (count = 2) => Array.from({ length: count }, (_, index) =
   promptIndex: index + 1,
   blob: makeWavBlob(),
   untrimmedBlob: new Blob([`raw-${index}`], { type: 'audio/webm' }),
+  rawDurationMs: 5000,
   trimStartMs: 100,
   trimmedDurationMs: 200,
 }));
@@ -84,9 +85,13 @@ test.afterEach(() => {
   restoreDownloadCapture();
 });
 
-test('timestamp output is exported by Timestamp and All with the canonical CSV', async () => {
+test('timestamp output is exported by Timestamp and All with raw-WAV voice starts', async () => {
   const recordings = makeRecordings();
-  const expectedCsv = buildTimestampCsv(recordings);
+  const expectedCsv = [
+    'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description',
+    'Task 1,0:00.100,0:00.200,decimal,Cue,',
+    'Task 2,0:05.100,0:00.200,decimal,Cue,',
+  ].join('\n');
 
   installDownloadCapture();
   assert.equal(exportTimestampFile(recordings, 'TASK-1001'), 'Timestamp CSV exported.');
@@ -102,6 +107,21 @@ test('timestamp output is exported by Timestamp and All with the canonical CSV',
   await exportAllFiles(recordings, 'TASK-1001');
   const archive = await JSZip.loadAsync(downloads[1].blob);
   assert.equal(await archive.file('TASK-1001_timestamps.csv').async('text'), expectedCsv);
+});
+
+test('timestamp export covers all 200 prompts on the raw-WAV timeline', async () => {
+  const recordings = makeRecordings(200);
+  const expectedHeader = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
+
+  installDownloadCapture();
+  assert.equal(exportTimestampFile(recordings, 'TASK-1001'), 'Timestamp CSV exported.');
+
+  const lines = (await downloads[0].blob.text()).split('\n');
+  assert.equal(lines.length, 201);
+  assert.equal(lines[0], expectedHeader);
+  assert.equal(lines[1], 'Task 1,0:00.100,0:00.200,decimal,Cue,');
+  assert.equal(lines[2], 'Task 2,0:05.100,0:00.200,decimal,Cue,');
+  assert.equal(lines[200], 'Task 200,16:35.100,0:00.200,decimal,Cue,');
 });
 
 test('individual export is trimmed, including individual files inside All', async () => {

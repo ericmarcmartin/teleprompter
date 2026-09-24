@@ -14,21 +14,23 @@ const csvEscape = (value) => {
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
-// Builds the contiguous Start/Duration chain: recordings are stitched back to
-// back with no gaps (trimmed silence removed), so start[i] = start[i-1] +
-// duration[i-1] — only the first row's start comes from its own leading-silence offset.
+// Builds timestamps on the session WAV timeline. Session audio concatenates
+// raw clips, so each task starts at the cumulative raw duration of prior clips
+// plus its detected voice onset within its own raw clip.
 export const buildTimestampRows = (recordings) => {
   const sorted = [...recordings].sort((a, b) => (a.promptIndex ?? 0) - (b.promptIndex ?? 0));
   const rows = [];
-  let nextStartMs = null;
+  let rawTimelineMs = 0;
 
   for (const rec of sorted) {
-    const fallbackDurationMs = (initialPromptSequence[(rec.promptIndex ?? 1) - 1]?.duration ?? 0) * 1000;
-    const durationMs = rec.trimmedDurationMs ?? fallbackDurationMs;
-    const startMs = nextStartMs === null ? (rec.trimStartMs ?? 0) : nextStartMs;
+    const configuredDurationMs = (initialPromptSequence[(rec.promptIndex ?? 1) - 1]?.duration ?? 0) * 1000;
+    const durationMs = rec.trimmedDurationMs ?? configuredDurationMs;
+    const onsetMs = rec.trimStartMs ?? 0;
+    const rawDurationMs = rec.rawDurationMs ?? configuredDurationMs;
+    const startMs = rawTimelineMs + onsetMs;
 
     rows.push({ taskName: `Task ${rec.promptIndex}`, startMs, durationMs, promptIndex: rec.promptIndex });
-    nextStartMs = startMs + durationMs;
+    rawTimelineMs += rawDurationMs;
   }
 
   return rows;

@@ -19,6 +19,8 @@ export const useRecorder = ({
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const stopRequestedRef = useRef(false);
+  const recorderStoppedRef = useRef(Promise.resolve());
+  const resolveRecorderStoppedRef = useRef(null);
   // Per-prompt recording storage: array of { promptIndex, blob, mimeType, entry }
   const perPromptRecordingsRef = useRef([]);
   // Blocks the tick from triggering another boundary crossing while a recorder
@@ -41,6 +43,10 @@ export const useRecorder = ({
       throw error;
     }
 
+    recorderStoppedRef.current = new Promise((resolve) => {
+      resolveRecorderStoppedRef.current = resolve;
+    });
+
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         chunks.push(event.data);
@@ -48,6 +54,11 @@ export const useRecorder = ({
     };
 
     recorder.onstop = () => {
+      if (resolveRecorderStoppedRef.current) {
+        resolveRecorderStoppedRef.current();
+        resolveRecorderStoppedRef.current = null;
+      }
+
       const finishedChunks = [...chunks];
       const isFinalPrompt = promptIndex >= initialPromptSequence.length;
       const shouldSaveChunk = shouldKeepRecordingChunk({
@@ -88,6 +99,8 @@ export const useRecorder = ({
       throw error;
     }
   };
+
+  const waitForRecorderStopped = () => recorderStoppedRef.current;
 
   const requestRecordingPermission = async () => {
     if (!isAudioSupported) return false;
@@ -141,6 +154,7 @@ export const useRecorder = ({
     stopRequestedRef,
     perPromptRecordingsRef,
     recorderReadyRef,
+    waitForRecorderStopped,
     startRecorderForPrompt,
     requestRecordingPermission,
     setMicrophoneEnabled,

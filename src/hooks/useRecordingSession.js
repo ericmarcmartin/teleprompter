@@ -57,7 +57,13 @@ import { useWaveform } from './useWaveform.js';
 // bad clip doesn't fail the whole export batch.
 const trimPerPromptRecording = async (rec, audioContext) => {
   if (!audioContext) {
-    return { ...rec, untrimmedBlob: rec.blob, trimStartMs: 0, trimmedDurationMs: null };
+    return {
+      ...rec,
+      untrimmedBlob: rec.blob,
+      rawDurationMs: null,
+      trimStartMs: 0,
+      trimmedDurationMs: null,
+    };
   }
 
   try {
@@ -68,6 +74,7 @@ const trimPerPromptRecording = async (rec, audioContext) => {
     return {
       ...rec,
       untrimmedBlob: rec.blob,
+      rawDurationMs: (decoded.length / decoded.sampleRate) * 1000,
       blob: wavBlob,
       mimeType: 'audio/wav',
       trimStartMs: onsetMs,
@@ -78,7 +85,7 @@ const trimPerPromptRecording = async (rec, audioContext) => {
     };
   } catch (error) {
     console.error('Unable to trim recording, keeping untrimmed audio', error);
-    return { ...rec, untrimmedBlob: rec.blob, trimStartMs: 0, trimmedDurationMs: null };
+    return { ...rec, untrimmedBlob: rec.blob, rawDurationMs: null, trimStartMs: 0, trimmedDurationMs: null };
   }
 };
 
@@ -231,6 +238,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
         blob: rec.blob,
         untrimmedBlob: rec.untrimmedBlob ?? rec.blob,
         audioUrl,
+        rawDurationMs: rec.rawDurationMs ?? null,
         trimStartMs: rec.trimStartMs ?? 0,
         trimmedDurationMs: rec.trimmedDurationMs ?? null,
         audioBuffer: rec.audioBuffer ?? null,
@@ -249,7 +257,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
 
   // Runs when the inter-task transition gap ends: fold the gap into paused
   // time, reset the prompt clock, unmute the mic, and start the next recorder.
-  const resumeNextPrompt = (nextIndex, nextPrompt) => {
+  const resumeNextPrompt = async (nextIndex, nextPrompt) => {
     setCurrentPromptIndex(nextIndex);
     currentPromptIndexRef.current = nextIndex;
     setActivePrompt(nextPrompt);
@@ -257,6 +265,7 @@ export const useRecordingSession = ({ taskId, playback }) => {
 
     recorder.setMicrophoneEnabled(true);
     try {
+      await recorder.waitForRecorderStopped();
       recorder.startRecorderForPrompt(nextIndex + 1);
     } catch (error) {
       console.error('Unable to continue recording', error);
