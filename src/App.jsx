@@ -6,6 +6,7 @@ import LoginPage from './components/LoginPage.jsx';
 import RecordingPage from './components/recording/RecordingPage.jsx';
 import { usePlayback } from './hooks/usePlayback.js';
 import { useRecordingSession } from './hooks/useRecordingSession.js';
+import { resetAppForStartOver } from './startOver.js';
 
 const getPageFromLocation = () => {
   const pathname = window.location.pathname.replace(/\/+$/, '');
@@ -98,24 +99,14 @@ function App() {
   // the Record button ready. The next Record click re-requests the mic stream
   // (browser remembers the grant, so no permission prompt).
   const handleStartOver = () => {
-    playback.stopPlaybackAudio();
-    if (playback.previewAudioRef.current) {
-      playback.previewAudioRef.current.pause();
-      playback.previewAudioRef.current.src = '';
-    }
-
-    playback.setIsPlayingPreview(false);
-    session.setIsStopped(false);
-    setPageHistory([]);
-    setCanGoForward(false);
-    setForwardPage(null);
-
-    session.teardownRecorderAndStream();
-    session.clearWaveform();
-    session.resetRecordingState({ clearSavedRecordings: true });
-    session.setStatus('Microphone ready. Press Record to begin.');
-    // Normalize the URL without navigating (no-op when already on this path).
-    window.history.replaceState({}, '', '/recording-collection-software');
+    resetAppForStartOver({
+      playback,
+      session,
+      setPageHistory,
+      setCanGoForward,
+      setForwardPage,
+      history: window.history,
+    });
   };
 
   return (

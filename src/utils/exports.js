@@ -54,7 +54,7 @@ const createTimestampBlob = (recordings) => new Blob([buildTimestampCsv(recordin
 
 export const getIndividualAudioSource = (recording) => recording.blob;
 
-const createIndividualWavFiles = async (recordings, taskId) => {
+export const createIndividualWavFiles = async (recordings, taskId) => {
   const validRecordings = recordings.filter((rec) => getIndividualAudioSource(rec));
   const files = [];
 
@@ -112,7 +112,7 @@ export const exportIndividualRecordingFiles = async (recordings, taskId) => {
   return `Exported ${files.length} individual recordings in a ZIP.`;
 };
 
-const createSessionAudioBlob = async (recordings) => {
+export const createSessionAudioBlob = async (recordings) => {
   const validRecordings = recordings.filter((rec) => getSessionAudioSource(rec));
   if (validRecordings.length === 0) return null;
 
