@@ -134,8 +134,7 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
       'timestamp',
       `${taskId || 'task'}_timestamps`,
       '.csv',
-      (_filenameBase, filename) => exportTimestampFile(savedRecordings, taskId, null, filename),
-      false,
+      (_filenameBase, filename) => (downloadTarget) => exportTimestampFile(savedRecordings, taskId, downloadTarget, filename),
       false,
     );
   };
