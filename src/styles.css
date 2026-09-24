@@ -689,6 +689,42 @@ select:focus {
   font-size: 0.82rem;
 }
 
+.export-filename-field {
+  display: flex;
+  align-items: center;
+  width: min(360px, 100%);
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(148,163,184,0.38);
+  border-radius: 9px;
+  background: rgba(248,250,252,0.88);
+  box-shadow: var(--shadow-inset-top);
+}
+
+.export-filename-field:focus-within {
+  border-color: rgba(14,165,233,0.62);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.14), var(--shadow-inset-top);
+}
+
+.export-filename-field input {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--navy);
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.export-filename-extension {
+  flex: 0 0 auto;
+  color: var(--slate);
+  font-size: 0.88rem;
+  user-select: none;
+}
+
 .export-overlay-actions {
   display: flex;
   justify-content: center;

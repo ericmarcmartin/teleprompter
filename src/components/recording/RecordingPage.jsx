@@ -105,19 +105,103 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
     }
   };
 
-  const handleExportTimestamp = () => runExport('timestamp', () => exportTimestampFile(savedRecordings, taskId), false, false);
-  const handleExportIndividual = () => runExport('individual', (downloadTarget) => exportIndividualRecordingFiles(savedRecordings, taskId, downloadTarget));
-  const handleExportSession = () => runExport('session', (downloadTarget) => exportSessionAudioFile(savedRecordings, taskId, downloadTarget));
-  const handleExportAll = () => runExport('all', (downloadTarget) => exportAllFiles(savedRecordings, taskId, downloadTarget));
-
-  const handleDownloadSelected = async () => {
-    await runExport('selected', async () => {
-      const result = await downloadSelectedPrompt(savedRecordings, downloadPromptIndex, taskId);
-      applyExportStatus(result.status);
-      if (result.completed) setIsExportMode(false);
-      return null;
-    }, false);
+  const openFilenameOverlay = (exportName, defaultFilename, extension, exportOperation, reserveDownload = true, waitForPaint = true) => {
+    setExportOverlay({
+      exportName,
+      isNaming: true,
+      filename: defaultFilename,
+      extension,
+      exportOperation,
+      reserveDownload,
+      waitForPaint,
+    });
   };
+
+  const confirmFilename = () => {
+    const filenameBase = exportOverlay.filename.trim();
+    if (!filenameBase) return;
+    const filename = `${filenameBase}${exportOverlay.extension}`;
+    runExport(
+      exportOverlay.exportName,
+      exportOverlay.exportOperation(filenameBase, filename),
+      exportOverlay.reserveDownload,
+      exportOverlay.waitForPaint,
+    );
+  };
+
+  const handleExportTimestamp = () => {
+    openFilenameOverlay(
+      'timestamp',
+      `${taskId || 'task'}_timestamps`,
+      '.csv',
+      (_filenameBase, filename) => exportTimestampFile(savedRecordings, taskId, null, filename),
+      false,
+      false,
+    );
+  };
+  const handleExportIndividual = () => {
+    openFilenameOverlay(
+      'individual',
+      `${taskId || 'task'}_individual_recordings`,
+      '.zip',
+      (_filenameBase, filename) => (downloadTarget) => exportIndividualRecordingFiles(savedRecordings, taskId, downloadTarget, filename),
+    );
+  };
+  const handleExportSession = () => {
+    openFilenameOverlay(
+      'session',
+      `${taskId || 'task'}_session`,
+      '.wav',
+      (_filenameBase, filename) => (downloadTarget) => exportSessionAudioFile(savedRecordings, taskId, downloadTarget, filename),
+    );
+  };
+  const handleExportAll = () => {
+    openFilenameOverlay(
+      'all',
+      `${taskId || 'task'}_export`,
+      '.zip',
+      (_filenameBase, filename) => (downloadTarget) => exportAllFiles(savedRecordings, taskId, downloadTarget, filename),
+    );
+  };
+
+  const handleDownloadSelected = () => {
+    openFilenameOverlay(
+      'selected',
+      `${taskId || 'task'}_selected`,
+      '',
+      (filenameBase) => async () => {
+        const result = await downloadSelectedPrompt(savedRecordings, downloadPromptIndex, taskId, filenameBase);
+        applyExportStatus(result.status);
+        if (result.completed) setIsExportMode(false);
+        return null;
+      },
+      false,
+    );
+  };
+
+  const handleFilenameChange = (event) => {
+    const { value } = event.target;
+    setExportOverlay((previous) => {
+      const sanitized = value.replace(/[\\/:*?"<>|]/g, '');
+      const extension = previous.extension;
+      const filename = extension && sanitized.toLowerCase().endsWith(extension)
+        ? sanitized.slice(0, -extension.length)
+        : sanitized;
+      return { ...previous, filename };
+    });
+  };
+
+  const handleFilenameKeyDown = (event) => {
+    if (event.key === 'Enter') confirmFilename();
+  };
+
+  const getExportTitle = (exportName) => ({
+    timestamp: 'Timestamp export',
+    individual: 'Individual tasks export',
+    session: 'Session export',
+    all: 'Full export',
+    selected: 'Selected tasks export',
+  }[exportName] || 'Export');
 
   const handleSelectPrompt = useCallback((index) => {
     if (isExportMode) {
@@ -255,16 +339,40 @@ const RecordingPage = ({ session, playback, taskId, onStartOver }) => {
           <div className="export-overlay-card">
             {exportOverlay.isProcessing ? <div className="export-overlay-spinner" aria-hidden="true" /> : null}
             <strong id="export-overlay-title">
-              {exportOverlay.isProcessing
+              {exportOverlay.isNaming
+                ? getExportTitle(exportOverlay.exportName)
+                : exportOverlay.isProcessing
                 ? (exportOverlay.exportName === 'selected' ? 'Preparing download' : 'Processing export')
                 : (exportOverlay.failed ? 'Export failed' : 'Download should start')}
             </strong>
-            <span>
+            {exportOverlay.isNaming ? (
+              <>
+                <span>Choose the file name before downloading.</span>
+                <div className="export-filename-field">
+                  <input
+                    autoFocus
+                    value={exportOverlay.filename}
+                    onChange={handleFilenameChange}
+                    onKeyDown={handleFilenameKeyDown}
+                    aria-label="File name"
+                  />
+                  {exportOverlay.extension ? <span className="export-filename-extension">{exportOverlay.extension}</span> : null}
+                </div>
+              </>
+            ) : <span>
               {exportOverlay.isProcessing
                 ? 'Please keep this window open.'
                 : (exportOverlay.failed ? 'Try the download again or close this message.' : 'If it does not, click the button below.')}
-            </span>
-            {!exportOverlay.isProcessing && (
+            </span>}
+            {exportOverlay.isNaming && (
+              <div className="export-overlay-actions">
+                <button className="primary compact" onClick={confirmFilename} disabled={!exportOverlay.filename.trim()}>
+                  Download
+                </button>
+                <button className="ghost compact" onClick={() => setExportOverlay(null)}>Cancel</button>
+              </div>
+            )}
+            {!exportOverlay.isProcessing && !exportOverlay.isNaming && (
               <div className="export-overlay-actions">
                 <button className="primary compact" onClick={exportOverlay.retry}>
                   {exportOverlay.failed ? 'Try again' : 'Download again'}

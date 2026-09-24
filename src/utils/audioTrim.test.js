@@ -47,9 +47,19 @@ test('trimSilenceFromAudioBuffer trims leading and trailing silence', () => {
   const buffer = makeFakeBuffer({ silenceMs: 100, speechMs: 100 });
   const { onsetMs, durationMs, trimmedBuffer } = trimSilenceFromAudioBuffer(buffer, { thresholdDb: -20, frameMs: 10 });
 
-  assert.ok(onsetMs >= 90 && onsetMs <= 110);
-  assert.ok(durationMs >= 90 && durationMs <= 110);
-  assert.ok(trimmedBuffer.getChannelData(0).every((sample) => sample === 0.5));
+  assert.equal(onsetMs, 0);
+  assert.equal(durationMs, 300);
+  assert.equal(trimmedBuffer.length, 300);
+  assert.equal(trimmedBuffer.getChannelData(0)[100], 0.5);
+});
+
+test('trimSilenceFromAudioBuffer clamps allowance to the source boundaries', () => {
+  const buffer = makeFakeBuffer({ silenceMs: 0, speechMs: 100 });
+  const { onsetMs, durationMs, trimmedBuffer } = trimSilenceFromAudioBuffer(buffer, { thresholdDb: -20, frameMs: 10 });
+
+  assert.equal(onsetMs, 0);
+  assert.equal(durationMs, 100);
+  assert.equal(trimmedBuffer.length, buffer.length);
 });
 
 test('trimSilenceFromAudioBuffer falls back to a minimal clip when all-silent', () => {

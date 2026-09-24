@@ -82,7 +82,7 @@ export const createIndividualWavFiles = async (recordings, taskId) => {
 export const getSessionAudioSource = (recording) =>
   recording.untrimmedBlob || recording.blob || recording.audioBuffer;
 
-export const exportTimestampFile = (recordings, taskId, downloadTarget = null) => {
+export const exportTimestampFile = (recordings, taskId, downloadTarget = null, filename = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for timestamp export.';
   }
@@ -90,11 +90,11 @@ export const exportTimestampFile = (recordings, taskId, downloadTarget = null) =
   const csv = buildTimestampCsv(recordings);
   const blob = createTimestampBlob(recordings);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(blob, `${taskId || 'task'}_${timestamp}_timestamps.csv`, downloadTarget);
+  downloadBlob(blob, filename || `${taskId || 'task'}_${timestamp}_timestamps.csv`, downloadTarget);
   return 'Timestamp CSV exported.';
 };
 
-export const exportIndividualRecordingFiles = async (recordings, taskId, downloadTarget = null) => {
+export const exportIndividualRecordingFiles = async (recordings, taskId, downloadTarget = null, filename = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for individual export.';
   }
@@ -111,7 +111,7 @@ export const exportIndividualRecordingFiles = async (recordings, taskId, downloa
 
   const archive = await zip.generateAsync({ type: 'blob' });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_individual_recordings.zip`, downloadTarget);
+  downloadBlob(archive, filename || `${taskId || 'task'}_${timestamp}_individual_recordings.zip`, downloadTarget);
   return `Exported ${files.length} individual recordings in a ZIP.`;
 };
 
@@ -144,7 +144,7 @@ export const createSessionAudioBlob = async (recordings) => {
   }
 };
 
-export const exportSessionAudioFile = async (recordings, taskId, downloadTarget = null) => {
+export const exportSessionAudioFile = async (recordings, taskId, downloadTarget = null, filename = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for session export.';
   }
@@ -156,7 +156,7 @@ export const exportSessionAudioFile = async (recordings, taskId, downloadTarget 
 
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob(wavBlob, `${taskId || 'task'}_${timestamp}_session.wav`, downloadTarget);
+    downloadBlob(wavBlob, filename || `${taskId || 'task'}_${timestamp}_session.wav`, downloadTarget);
     return 'Session audio exported as a single file.';
   } catch (error) {
     console.error('Unable to merge session recording', error);
@@ -164,7 +164,7 @@ export const exportSessionAudioFile = async (recordings, taskId, downloadTarget 
   }
 };
 
-export const exportAllFiles = async (recordings, taskId, downloadTarget = null) => {
+export const exportAllFiles = async (recordings, taskId, downloadTarget = null, filename = null) => {
   if (recordings.length === 0) {
     return 'No recordings available for full export.';
   }
@@ -188,13 +188,13 @@ export const exportAllFiles = async (recordings, taskId, downloadTarget = null) 
 
   const archive = await zip.generateAsync({ type: 'blob' });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  downloadBlob(archive, `${taskId || 'task'}_${timestamp}_export.zip`, downloadTarget);
+  downloadBlob(archive, filename || `${taskId || 'task'}_${timestamp}_export.zip`, downloadTarget);
   return `Full export ZIP generated for ${taskId}.`;
 };
 
 // Downloads per-prompt audio + timestamp CSV files for the selected task (or all).
 // Returns { status, completed } — completed=true means the caller should close export mode.
-export const downloadSelectedPrompt = async (recordings, selection, taskId) => {
+export const downloadSelectedPrompt = async (recordings, selection, taskId, filenameBase = null) => {
   if (recordings.length === 0) {
     return { status: 'No recordings available for export.', completed: false };
   }
@@ -213,7 +213,9 @@ export const downloadSelectedPrompt = async (recordings, selection, taskId) => {
 
   for (const rec of recordingsToExport) {
     const effectiveTaskId = rec.taskId || taskId;
-    const label = `task${rec.promptIndex}_${effectiveTaskId}`;
+    const label = filenameBase
+      ? `${filenameBase}_task${rec.promptIndex}`
+      : `task${rec.promptIndex}_${effectiveTaskId}`;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
     if (rec.blob) {

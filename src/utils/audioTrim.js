@@ -2,6 +2,8 @@
 // interface (numberOfChannels/sampleRate/length/getChannelData) so it works
 // with real AudioBuffers in the browser and plain fakes in tests.
 
+export const TRIM_ALLOWANCE_MS = 100;
+
 // Scans fixed-size frames across all channels (RMS amplitude) and returns the
 // [onsetMs, offsetMs) window covering everything at/above thresholdDb, or
 // null if no frame ever crosses the threshold (silent clip).
@@ -78,10 +80,13 @@ export const trimSilenceFromAudioBuffer = (audioBuffer, options = {}) => {
     return { trimmedBuffer, onsetMs: 0, durationMs: (trimmedBuffer.length / audioBuffer.sampleRate) * 1000 };
   }
 
-  const trimmedBuffer = trimAudioBuffer(audioBuffer, region.onsetMs, region.offsetMs);
+  const durationMs = (audioBuffer.length / audioBuffer.sampleRate) * 1000;
+  const onsetMs = Math.max(0, region.onsetMs - TRIM_ALLOWANCE_MS);
+  const offsetMs = Math.min(durationMs, region.offsetMs + TRIM_ALLOWANCE_MS);
+  const trimmedBuffer = trimAudioBuffer(audioBuffer, onsetMs, offsetMs);
   return {
     trimmedBuffer,
-    onsetMs: region.onsetMs,
+    onsetMs,
     durationMs: (trimmedBuffer.length / audioBuffer.sampleRate) * 1000,
   };
 };
