@@ -8,11 +8,11 @@ import { downloadBlob, formatDecimalTime } from './format.js';
 import { convertBlobToWav } from './wav.js';
 import { mergeAudioBuffersInWorker } from './audioExportWorker.js';
 
-const TIMESTAMP_CSV_HEADER = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
+const TIMESTAMP_CSV_HEADER = 'Name\tStart\tDuration\tTime Format\tType\tDescription';
 
-const csvEscape = (value) => {
+const markerEscape = (value) => {
   const str = String(value ?? '');
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  return /["\t\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
 // Builds timestamps on the session WAV timeline. Session audio concatenates
@@ -30,7 +30,12 @@ export const buildTimestampRows = (recordings) => {
     const rawDurationMs = rec.rawDurationMs ?? configuredDurationMs;
     const startMs = rawTimelineMs + onsetMs;
 
-    rows.push({ taskName: `Task ${rec.promptIndex}`, startMs, durationMs, promptIndex: rec.promptIndex });
+    rows.push({
+      taskName: `Task ${String(rec.promptIndex).padStart(2, '0')}`,
+      startMs,
+      durationMs,
+      promptIndex: rec.promptIndex,
+    });
     rawTimelineMs += rawDurationMs;
   }
 
@@ -38,13 +43,13 @@ export const buildTimestampRows = (recordings) => {
 };
 
 const rowToCsvLine = (row) => [
-  csvEscape(row.taskName),
+  markerEscape(row.taskName),
   formatDecimalTime(row.startMs),
   formatDecimalTime(row.durationMs),
   'decimal',
   'Cue',
   '',
-].join(',');
+].join('\t');
 
 export const buildTimestampCsv = (recordings) => {
   const rows = buildTimestampRows(recordings);

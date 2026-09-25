@@ -96,12 +96,12 @@ test.afterEach(() => {
   restoreDownloadCapture();
 });
 
-test('timestamp output is exported by Timestamp and All with raw-WAV voice starts', async () => {
+test('timestamp output is exported by Timestamp and All with Audition marker columns', async () => {
   const recordings = makeRecordings();
   const expectedCsv = [
-    'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description',
-    'Task 1,0:00.100,0:00.200,decimal,Cue,',
-    'Task 2,0:05.100,0:00.200,decimal,Cue,',
+    'Name\tStart\tDuration\tTime Format\tType\tDescription',
+    'Task 01\t0:00.100\t0:00.200\tdecimal\tCue\t',
+    'Task 02\t0:05.100\t0:00.200\tdecimal\tCue\t',
   ].join('\n');
 
   installDownloadCapture();
@@ -120,9 +120,9 @@ test('timestamp output is exported by Timestamp and All with raw-WAV voice start
   assert.equal(await archive.file('TASK-1001_timestamps.csv').async('text'), expectedCsv);
 });
 
-test('timestamp export covers all 200 prompts on the raw-WAV timeline', async () => {
+test('timestamp export covers all 200 prompts in Audition marker format', async () => {
   const recordings = makeRecordings(200);
-  const expectedHeader = 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description';
+  const expectedHeader = 'Name\tStart\tDuration\tTime Format\tType\tDescription';
 
   installDownloadCapture();
   assert.equal(exportTimestampFile(recordings, 'TASK-1001'), 'Timestamp CSV exported.');
@@ -130,9 +130,9 @@ test('timestamp export covers all 200 prompts on the raw-WAV timeline', async ()
   const lines = (await downloads[0].blob.text()).split('\n');
   assert.equal(lines.length, 201);
   assert.equal(lines[0], expectedHeader);
-  assert.equal(lines[1], 'Task 1,0:00.100,0:00.200,decimal,Cue,');
-  assert.equal(lines[2], 'Task 2,0:05.100,0:00.200,decimal,Cue,');
-  assert.equal(lines[200], 'Task 200,16:35.100,0:00.200,decimal,Cue,');
+  assert.equal(lines[1], 'Task 01\t0:00.100\t0:00.200\tdecimal\tCue\t');
+  assert.equal(lines[2], 'Task 02\t0:05.100\t0:00.200\tdecimal\tCue\t');
+  assert.equal(lines[200], 'Task 200\t16:35.100\t0:00.200\tdecimal\tCue\t');
 });
 
 test('individual export is trimmed, including individual files inside All', async () => {

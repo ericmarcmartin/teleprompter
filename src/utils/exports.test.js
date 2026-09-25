@@ -78,13 +78,13 @@ test('buildTimestampCsv emits the expected header and rows', () => {
   const csv = buildTimestampCsv(recordings);
   const lines = csv.split('\n');
 
-  assert.equal(lines[0], 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description');
-  assert.equal(lines[1], 'Task 1,0:00.296,0:02.259,decimal,Cue,');
-  assert.equal(lines[2], 'Task 2,0:05.050,0:01.620,decimal,Cue,');
+  assert.equal(lines[0], 'Name\tStart\tDuration\tTime Format\tType\tDescription');
+  assert.equal(lines[1], 'Task 01\t0:00.296\t0:02.259\tdecimal\tCue\t');
+  assert.equal(lines[2], 'Task 02\t0:05.050\t0:01.620\tdecimal\tCue\t');
 });
 
 test('buildTimestampCsv handles an empty session', () => {
   const csv = buildTimestampCsv([]);
-  assert.equal(csv, 'Task Name,Start,Duration,Time Format (Decimal),Type (Cue),Description');
+  assert.equal(csv, 'Name\tStart\tDuration\tTime Format\tType\tDescription');
 });
 
